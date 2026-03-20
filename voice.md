@@ -155,3 +155,77 @@ passages, and calibrates against them throughout drafting.
 <!-- 3-5 paragraphs showing what this voice is NOT.
      Not the generic anti-slop stuff above -- specific to this novel.
      "This is too flowery for our tone." "This is too modern." -->
+
+### Rhetorical Tic Budget
+<!-- Generated during foundation. Every voice has characteristic
+     constructions that are strengths in moderation and tells at
+     density. Identify the 3-5 most distinctive constructions of
+     THIS voice and set frequency caps.
+
+     Example for a DFW-inspired voice:
+       "the kind of [noun] that [clause]" -- max 3 per 10,000 words
+       "which was [recontextualization]" -- max 2 per 1,000 words
+       "the way [extended simile]" -- max 2 per 1,000 words
+       deflationary sentence endings -- max 1 per 5 paragraphs
+       parenthetical digressions > 20 words -- max 3 per 1,000 words
+
+     Example for a spare/Hemingway voice:
+       "and" as sentence opener -- max 5 per 1,000 words
+       one-sentence paragraphs -- max 2 per page
+       dialogue without tags -- max 3 consecutive exchanges
+
+     These are the constructions that make the voice distinctive.
+     They are also the first things to become tics at AI density.
+     Set budgets during foundation and enforce during revision. -->
+
+### Punctuation Discipline
+<!-- Generated during foundation. Punctuation is part of voice.
+
+     Specify:
+       Em dash budget: total per 1,000 words (typical: 2-3)
+       Paired em-dash parentheticals: allowed? If yes, max frequency
+       Semicolons: encouraged, discouraged, or neutral?
+       Colons: for lists only, or for dramatic introductions?
+       Parentheses: for true asides, or avoided in this voice?
+       Ellipses: in dialogue only, or in narration too?
+
+     Example: "Em dashes at ~2.5 per 1,000 words. No paired
+     parenthetical dashes. Semicolons encouraged for connecting
+     related independent clauses. Colons for dramatic reveals.
+     Parentheses for digressions that are genuinely subordinate
+     to the main clause. No ellipses in narration." -->
+
+### Scale-Shifting Parameters
+<!-- Generated during foundation. For voices that zoom between
+     micro and macro observation.
+
+     Specify:
+       Range: how far apart can zooms go? (crumb on counter to
+         Andromeda galaxy? Or just room-to-neighborhood?)
+       Distribution: even (one per section) or clustered (three
+         in one paragraph, then five pages without)?
+       Transition style: sudden (mid-sentence) or gradual
+         (paragraph break)?
+       Thematic connection: must zooms connect to the argument,
+         or should some be purely associative?
+
+     Leave blank if the voice doesn't do this. Not every voice
+     needs scale shifts. -->
+
+### Register Variation
+<!-- Generated during foundation. The dominant register and at
+     least one counter-register for emotional breaks.
+
+     Specify:
+       Dominant mode: "Long recursive analytical sentences with
+         parenthetical digressions and self-qualifying observations."
+       Counter mode: "Short flat declarative sentences. Physical
+         detail only. No digressions. No qualifications."
+       When to deploy counter mode: "Emotional crises, moments of
+         genuine fear or grief, scenes where the narrator's usual
+         apparatus fails."
+       Minimum frequency: at least once per 10,000 words.
+
+     The counter-register is what makes the dominant register
+     survivable at length. Without it, even the best voice
+     becomes monotone. -->
