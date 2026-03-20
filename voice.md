@@ -195,23 +195,6 @@ passages, and calibrates against them throughout drafting.
      Parentheses for digressions that are genuinely subordinate
      to the main clause. No ellipses in narration." -->
 
-### Scale-Shifting Parameters
-<!-- Generated during foundation. For voices that zoom between
-     micro and macro observation.
-
-     Specify:
-       Range: how far apart can zooms go? (crumb on counter to
-         Andromeda galaxy? Or just room-to-neighborhood?)
-       Distribution: even (one per section) or clustered (three
-         in one paragraph, then five pages without)?
-       Transition style: sudden (mid-sentence) or gradual
-         (paragraph break)?
-       Thematic connection: must zooms connect to the argument,
-         or should some be purely associative?
-
-     Leave blank if the voice doesn't do this. Not every voice
-     needs scale shifts. -->
-
 ### Register Variation
 <!-- Generated during foundation. The dominant register and at
      least one counter-register for emotional breaks.
@@ -228,4 +211,10 @@ passages, and calibrates against them throughout drafting.
 
      The counter-register is what makes the dominant register
      survivable at length. Without it, even the best voice
-     becomes monotone. -->
+     becomes monotone.
+
+     Optional -- scale-shifting: If the voice zooms between micro
+     and cosmic observation, specify the range (crumb-to-galaxy
+     or room-to-neighborhood?), the distribution (clustered or
+     even?), and whether zooms must connect to the argument or
+     can be purely associative. -->

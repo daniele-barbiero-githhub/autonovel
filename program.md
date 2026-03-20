@@ -214,15 +214,16 @@ critique covering:
   - **Surprise audit**: Does the story contain at least one
     consequence its own framework can't absorb? If every event
     confirms the thesis, the story is predictable.
-  - **Domain insight** (if applicable): Is the milieu commentary
-    insider knowingness or genuinely dangerous? Quote the most
-    uncomfortable observation. If you can't find one, write one.
   - **Register variation**: Does the prose have more than one mode?
     Identify the dominant register and any counter-registers. If
     there's only one, flag it.
   - **Dramatization audit**: List the 3 most consequential dramatic
     events. Are they scenes (with dialogue, action, physical detail)
     or summaries? Any summary should become a scene.
+
+For literary/contemporary fiction, also apply the evaluation rubric
+in CRAFT.md §9 (domain insight danger level, thesis-resistance,
+structural model identification).
 
 This critique should be a prose document, not a score. The output
 is a list of specific, addressable problems, not a number.

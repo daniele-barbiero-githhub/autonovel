@@ -206,83 +206,29 @@ that sit in the text and refuse to become symbols.
 this serve the thesis? If the answer is yes for every single one,
 the story has become an essay with characters.
 
-**Fix:** Add details that resist. A smell that doesn't connect. A
-memory of a parent that arrives sideways. A moment of comedy that
-has nothing to do with anything. A character doing something the
-text doesn't interpret (push-ups, humming a melody from nowhere,
-sleeping standing up). Distribute these unevenly -- not one per
-chapter, but clustered in some places and absent in others.
+**Fix:** Add details that resist. A sensory detail that doesn't
+connect. A memory that arrives without thematic justification. A
+moment of comedy unrelated to the premise. A character doing
+something the text doesn't interpret. Distribute these unevenly --
+not one per chapter, but clustered in some places and absent in
+others. See Phase 2.5 (Organic Finishing) in program.md.
 
 ---
 
-## 15. THE "WHICH WAS" MACHINE
+## 15. SENTENCE-LEVEL TICS AT CHAPTER DENSITY
 
-A sentence-level tic where every fact is immediately recontextualized
-via a relative clause. "X, which was Y." "He did Z, which was the
-kind of thing that..." The individual instance is a valid grammatical
-construction. The density is the tell.
+Several patterns that are individually valid become anti-patterns at
+AI density. These are covered with detection thresholds in
+ANTI-SLOP.md (see: paired em-dash parentheticals, "which was"
+recontextualization machine, deflationary sentence endings). What
+makes them ANTI-PATTERNS rather than just slop is that they compound
+across a chapter: a reader won't notice one deflationary ending but
+will start skipping final clauses when every paragraph deflates.
 
-Related constructions:
-  - "the kind of [noun] that [lengthy clause]"
-  - "the way [simile extended across a full clause]"
-  - Any sentence that states a fact and then immediately re-explains
-    what the fact means
-
-**Detection:** Count "which was" and "which is" per 1000 words.
-Count "the kind of" per 10,000 words. Count "the way" as simile
-opener per 10,000 words. Thresholds:
-  - "which was/is": max ~2 per 1000 words
-  - "the kind of [noun] that": max ~3 per 10,000 words
-  - "the way" simile: max ~3 per 10,000 words
-
-**Fix:** Convert weakest instances to: separate sentences, colons,
-semicolons, or simply cut the recontextualization. The fact can
-stand without being re-explained.
-
----
-
-## 16. PAIRED EM-DASH PARENTHETICALS
-
-The `— X —` construction used as inline parentheses in the middle
-of a long sentence. This is the specific variant of em dash overuse
-that is most distinctively AI and most damaging to prose rhythm.
-
-"The body — and he'd been warned by the doctor that this would
-happen, though the warning had been delivered with the clinical
-detachment of a man who has given this particular speech hundreds
-of times — would undergo a period of adjustment."
-
-Every one of these can be rewritten as: parentheses (for true
-asides), a separate sentence (for substantive digressions), a
-colon (for introductions), or a comma-separated clause.
-
-**Rule:** Max 2 paired em-dash parentheticals per 10,000 words.
-Reserve for moments of genuine syntactic disruption, not routine
-digression.
-
----
-
-## 17. DEFLATIONARY ENDINGS
-
-Sentences or paragraphs that build toward something and then
-undercut it with a wry observation in the final clause:
-
-  "...which was refreshing."
-  "...which was, come to think of it, also the point."
-  "...a distinction Ruth considered significant."
-
-Each individual instance is fine -- it's a legitimate rhetorical
-move. The AI default is one per paragraph, creating a monotonous
-rhythm of: build, deflate, build, deflate. The deflation becomes
-predictable and the reader starts skipping final clauses.
-
-**Detection:** Read the last sentence of every paragraph in a
-chapter. If more than a third end with a deflationary observation,
-rewrite the weakest.
-
-**Fix:** Let some paragraphs end at their peak. Let some trail off.
-Let some end mid-thought. Vary the shape of paragraph endings the
-way you vary sentence length.
+The chapter-level check: read only the last sentence of every
+paragraph in a chapter. If they share a pattern (deflation, "which
+was" reframe, em-dash interruption), the chapter has a structural
+tic regardless of whether any individual sentence is problematic.
 
 ---
 
