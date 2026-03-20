@@ -305,14 +305,9 @@ Rules:
 TELLING = using an abstract label where concrete evidence would work.
 SHOWING = conveying through action, sensory detail, dialogue, specifics.
 
-Detectable telling patterns (regex-able):
-  - "[Character] felt [emotion]" / "was [emotion]" / "seemed [emotion]"
-  - Direct emotion words as exposition: angry, sad, happy, scared,
-    nervous, excited, jealous, guilty, anxious, lonely, desperate
-  - Emotion adverbs: angrily, sadly, happily, nervously
-  - Trait declarations: "[Character] was [trait]" -- brave, kind, smart
-  - Relationship declarations: "They were best friends."
-  - Atmosphere labels: "It was a creepy house."
+The specific detectable patterns (emotion labels, trait declarations,
+atmosphere labels, fiction-specific AI tells) are consolidated in
+§6 under "Fiction-Specific AI Tells." See also ANTI-SLOP.md.
 
 When telling is OK:
   - Time transitions: "Three weeks later"

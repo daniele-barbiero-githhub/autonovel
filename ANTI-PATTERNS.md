@@ -80,17 +80,7 @@ comparison, vary the construction. "Like" is fine. Direct metaphor
 
 ---
 
-## 6. SECTION BREAK AS RHYTHM CRUTCH
-
-AI uses "---" breaks to avoid writing transitions. A chapter with
-5 section breaks is 5 vignettes, not a chapter.
-
-**Rule:** Max 2 per chapter, for genuine time/location jumps. Force
-continuous prose for everything else.
-
----
-
-## 7. PARAGRAPH LENGTH UNIFORMITY
+## 6. PARAGRAPH LENGTH UNIFORMITY
 
 AI paragraphs cluster at 4-6 sentences, especially in middle
 sections. The variation that appears at chapter openings and closings
@@ -102,7 +92,7 @@ paragraphs of similar length.
 
 ---
 
-## 8. PREDICTABLE EMOTIONAL ARCS
+## 7. PREDICTABLE EMOTIONAL ARCS
 
 Beats arrive on schedule. If the outline says "curiosity → discovery
 → dread," the chapter delivers exactly that in exactly that order
@@ -115,7 +105,7 @@ beat that interrupts another beat.
 
 ---
 
-## 9. REPETITIVE CHAPTER ENDINGS
+## 8. REPETITIVE CHAPTER ENDINGS
 
 AI finds a closing pattern and reuses it. In this novel: 4 chapters
 ended with "Cass outside, listening to his father work."
@@ -125,7 +115,7 @@ ending belongs to THAT chapter specifically.
 
 ---
 
-## 10. BALANCED ANTITHESIS IN DIALOGUE
+## 9. BALANCED ANTITHESIS IN DIALOGUE
 
 "I'm not saying X. I'm saying Y."
 "Not X, but Y."
@@ -140,7 +130,7 @@ structure. If multiple characters use it, they're not distinct.
 
 ---
 
-## 11. DIALOGUE AS WRITTEN PROSE
+## 10. DIALOGUE AS WRITTEN PROSE
 
 Characters speak in complete, polished sentences. No one stumbles,
 interrupts, trails off, or says something slightly wrong.
@@ -154,7 +144,7 @@ a thought. At least one imperfect line per scene.
 
 ---
 
-## 12. SCENE-SUMMARY IMBALANCE
+## 11. SCENE-SUMMARY IMBALANCE
 
 AI defaults to summary when a scene would be more engaging. "The
 morning passed" skips what could be a 200-word interaction that
@@ -165,7 +155,7 @@ with dialogue and action). Summary is for time compression only.
 
 ---
 
-## 13. ONE EMOTIONAL TEMPERATURE
+## 12. ONE EMOTIONAL TEMPERATURE
 
 Not a sentence-level pattern but a chapter- or novel-level one.
 Every scene is processed through the same register: ironic distance,
@@ -190,7 +180,7 @@ through a change in style, not just a change in subject matter.
 
 ---
 
-## 14. THESIS-ABSORPTION
+## 13. THESIS-ABSORPTION
 
 Every detail in the story connects to the argument. The bathmat
 connects to questions of choice. The fork connects to identity.
@@ -215,7 +205,7 @@ others. See Phase 2.5 (Organic Finishing) in program.md.
 
 ---
 
-## 15. THE TYPE-DESCRIPTION FORMULA
+## 14. THE TYPE-DESCRIPTION FORMULA
 
 The single most common AI character-description tell. The pattern:
 "the [expression/posture/confidence/satisfaction] of [someone/a man/
@@ -248,7 +238,7 @@ not categories.
 
 ---
 
-## 16. SCENE-STRUCTURE REPETITION
+## 15. SCENE-STRUCTURE REPETITION
 
 The paragraph-template problem (§1) applied at scene scale. Every
 scene follows the same beat sequence: arrive at location → observe
@@ -268,7 +258,7 @@ unpredictable.
 
 ---
 
-## 17. UNIVERSAL COMPETENCE
+## 16. UNIVERSAL COMPETENCE
 
 The three-slider character model (CRAFT.md §2) asks for at least
 two sliders high per character. But when EVERY character in the
@@ -287,7 +277,7 @@ absence is a tell.
 
 ---
 
-## 18. MAGIC SYSTEM RE-EXPLANATION
+## 17. MAGIC SYSTEM RE-EXPLANATION
 
 Related to the Over-Explain (§1) but specific to speculative
 fiction. The first time a magic/tech/speculative mechanic triggers,
@@ -306,7 +296,7 @@ is enough.
 
 ---
 
-## 19. SENTENCE-LEVEL TICS AT CHAPTER DENSITY
+## 18. SENTENCE-LEVEL TICS AT CHAPTER DENSITY
 
 Several patterns that are individually valid become anti-patterns at
 AI density. These are covered with detection thresholds in

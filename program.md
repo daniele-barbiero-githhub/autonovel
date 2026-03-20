@@ -255,18 +255,15 @@ revision that touches timeline, layout, or character history.
 
 ## The Stability Trap (CRITICAL)
 
-AI's worst tendency is FAVOURING STABILITY OVER CHANGE. This kills
-fiction. Actively fight it at every phase:
+AI favours stability over change. This kills fiction. The full
+analysis and concrete countermeasure protocols are in CRAFT.md §7.
+Read it. The short version:
 
 - Characters must end TRULY different from how they began.
 - Let bad things stay bad. Not everything gets fixed.
-- Allow irreversible decisions and irreversible loss.
-- Withhold information from the reader. Maintain mystery.
-- Create genuine moral ambiguity. The "right" choice should be unclear.
-- Vary emotional intensity: quiet/explosive/dread/relief/wonder/horror.
-- If a choice has no real cost, it's not a real choice.
-- Conflicts should NOT resolve too quickly or too cleanly.
-- Resist the urge to round off sharp edges into something safer.
+- At least one register break per 10,000 words (CRAFT.md §7).
+- At least one unforced protagonist decision (CRAFT.md §7).
+- At least one scene that breaks the story's own rules (CRAFT.md §7).
 
 ## Foundation Phase: Voice Discovery
 
@@ -292,12 +289,17 @@ Every POV character must have documented before drafting begins:
 
 ## Foundation Phase: Plot Framework
 
-The outline must demonstrate:
+For genre fiction, the outline must demonstrate:
 - Save the Cat beats at roughly correct percentage marks
 - Try-fail cycle types planned for each chapter (yes-but / no-and)
 - Foreshadowing ledger with every plant and its planned payoff
 - MICE threads identified and planned to close in reverse order
 - Escalating stakes through Act 2
+
+For literary fiction or non-beat-sheet structures, identify the
+structural model explicitly (see CRAFT.md §9: question structure,
+accretion structure, recursive structure). If you can't name the
+structure, the story may lack one rather than transcend one.
 
 ## Rules
 
