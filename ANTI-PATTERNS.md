@@ -215,7 +215,98 @@ others. See Phase 2.5 (Organic Finishing) in program.md.
 
 ---
 
-## 15. SENTENCE-LEVEL TICS AT CHAPTER DENSITY
+## 15. THE TYPE-DESCRIPTION FORMULA
+
+The single most common AI character-description tell. The pattern:
+"the [expression/posture/confidence/satisfaction] of [someone/a man/
+a person] who [lengthy clause describing the type]."
+
+Examples:
+  "the expression of a man who had been disappointed by rooms
+    full of people before"
+  "the confidence of someone who had done all the reading and
+    wanted the room to know it"
+  "the slightly aggressive cheerfulness of someone who had been
+    doing this since before dawn"
+  "the quiet satisfaction of a man who had planned this exact
+    outcome"
+
+This construction turns characters into instances of types. Instead
+of showing a disappointed teacher, it shows "the expression of a
+man who had been disappointed." The character is depersonalized
+into a sociological category. The reader sees a type, not a person.
+
+**Detection:** Search for "the [noun] of [someone/a man/a woman/
+a person] who." More than 2 per chapter is a pattern.
+
+**Fix:** Show the specific physical detail instead. Not "the
+expression of a man who had been disappointed" but: the way his
+mouth thinned when he looked at the board. Not "the confidence of
+someone who had done all the reading" but: she set the stack down
+like it was a hand of cards she knew she'd win with. Specifics,
+not categories.
+
+---
+
+## 16. SCENE-STRUCTURE REPETITION
+
+The paragraph-template problem (§1) applied at scene scale. Every
+scene follows the same beat sequence: arrive at location → observe
+the environment → interact with someone → reflect on the
+interaction → leave.
+
+**Detection:** Summarize each scene in a chapter as a sequence of
+beats (arrive, observe, interact, reflect, leave). If three or
+more scenes share the same sequence, the chapter has structural
+monotone.
+
+**Fix:** Vary scene structures. Some scenes should start mid-
+conversation. Some should end before resolution. Some should skip
+the observation phase and open on dialogue. Some should be pure
+interiority with no interaction. The shape of a scene should be
+unpredictable.
+
+---
+
+## 17. UNIVERSAL COMPETENCE
+
+The three-slider character model (CRAFT.md §2) asks for at least
+two sliders high per character. But when EVERY character in the
+cast is high-competence, the world becomes a seminar: a room of
+smart people being smart at each other. Nobody fumbles. Nobody
+misreads a situation. Nobody is bad at their job in a way that
+isn't plot-functional (a character who makes one calibrated mistake
+to demonstrate the system doesn't count).
+
+**Fix:** At least one character should be incompetent in a way
+that is not a plot device. At least one character should say
+something genuinely stupid. At least one interaction should
+feature someone who has no idea what's happening and doesn't
+care. These people exist in every professional milieu, and their
+absence is a tell.
+
+---
+
+## 18. MAGIC SYSTEM RE-EXPLANATION
+
+Related to the Over-Explain (§1) but specific to speculative
+fiction. The first time a magic/tech/speculative mechanic triggers,
+it's described in full. The second time, it's described in full
+again. The third time, again.
+
+AI defaults to re-explaining mechanics because it can't assume
+the reader remembers. Human writers establish the mechanic once,
+then reference it in shorthand.
+
+**Rule:** Full sensory description of a mechanic once. After that,
+a brief physical cue (a word, a gesture, a sensation) is sufficient.
+If the character's jaw tightens when they detect a lie, the reader
+needs the full explanation once. After that, "his jaw tightened"
+is enough.
+
+---
+
+## 19. SENTENCE-LEVEL TICS AT CHAPTER DENSITY
 
 Several patterns that are individually valid become anti-patterns at
 AI density. These are covered with detection thresholds in

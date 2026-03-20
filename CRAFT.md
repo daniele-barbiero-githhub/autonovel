@@ -168,6 +168,25 @@ Eight measurable dimensions per character:
 Test: Remove all dialogue tags. Can you still tell who is speaking?
 If yes, dialogue is distinct. If no, characters need differentiation.
 
+### Dialogue Balance and Rhythm
+
+AI dialogue defaults to perfectly balanced exchanges: each line
+roughly the same length, alternating with metronomic regularity,
+every riposte matching the previous line's register and wit.
+Real conversation is lumpy. One person talks more than the other.
+Someone interrupts. Someone says too much. Someone says nothing.
+A line falls flat and there's a silence.
+
+Checks:
+  - Line length variation: do some lines have 3 words and some
+    have 30? Or is everything 8-15?
+  - Asymmetry: does one person dominate? Or do they trade equal
+    turns like a tennis rally?
+  - Dead air: is there at least one moment where nobody says
+    anything and the silence is not described or analyzed?
+  - Imperfection: does at least one character say something
+    clumsy, wrong, or badly phrased in every dialogue scene?
+
 ### Supporting Character Opacity Test
 
 The wound/want/need/lie framework and three sliders are designed for
