@@ -252,7 +252,7 @@ def get_provider(name: str) -> TTSProvider:
 
 
 def load_voices(provider_name: str):
-    """Load voice mapping from audiobook_voices.json for specific provider."""
+    """Load voice mapping from audiobook_voices.json."""
     if not VOICES_FILE.exists():
         print(f"ERROR: {VOICES_FILE} not found. Create it first.", file=sys.stderr)
         sys.exit(1)
@@ -278,9 +278,9 @@ def load_script(ch_num):
 
 
 def chunk_segments(segments, voices, max_chars=MAX_CHARS_PER_CALL):
-    """Split segments into chunks that fit within the provider character limit.
+    """Split segments into chunks that fit within the API character limit.
     
-    Each chunk is a list of {text, voice_id} dicts suitable for generation.
+    Each chunk is a list of {text, voice_id} dicts suitable for text_to_dialogue.
     We try to keep dialogue exchanges together (don't split mid-conversation).
     """
     chunks = []
@@ -437,7 +437,7 @@ def generate_chapter(ch_num, provider, voices, test_mode=False):
 
 
 def list_voices(provider):
-    """List available voices for the current provider."""
+    """List available ElevenLabs voices."""
     print(f"\n{'='*60}")
     print(f"AVAILABLE VOICES FOR {provider.__class__.__name__.replace('Provider', '').upper()}")
     print(f"{'='*60}")
