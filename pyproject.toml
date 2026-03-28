@@ -4,6 +4,20 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.12"
 dependencies = [
+    "elevenlabs>=2.39.0",
     "httpx>=0.28.1",
+    "ipython>=9.11.0",
+    "kokoro-onnx>=0.5.0",
+    "numpy>=2.4.3",
+    "onnxruntime>=1.24.4",
+    "openai>=2.29.0",
+    "piper-tts>=1.4.1",
+    "pydub>=0.25.1",
     "python-dotenv>=1.2.2",
+    "soundfile>=0.13.1",
+    "torch>=2.10.0",
+    "torchaudio>=2.10.0",
+    "torchvision>=0.25.0",
+    "webdataset>=1.0.2",
+    "whisperspeech>=0.8.9",
 ]

@@ -1,0 +1,18 @@
+schema: spec-driven
+
+# Project context (optional)
+context: |
+  Tech stack: Python 3.12, ElevenLabs (migrating to Kokoro for local TTS)
+  Domain: AI-assisted novel generation and audiobook creation
+  Key components: 
+    - Novel drafting and revision pipeline
+    - Audiobook script parsing and generation
+    - Local TTS with Kokoro-82M
+
+# Per-artifact rules (optional)
+rules:
+  specs:
+    - Focus on modularity and clear provider abstractions.
+  code:
+    - Maintain existing segment-based script processing.
+    - Ensure clean separation between generation and TTS.
