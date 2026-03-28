@@ -261,8 +261,7 @@ def load_voices(provider_name: str):
     for name, info in data.items():
         if name.startswith("_"):
             continue
-        prov_data = info.get("providers", {})
-        vid = prov_data.get(provider_name)
+        vid = info.get("providers", {}).get(provider_name)
         if vid and vid != "REPLACE_WITH_VOICE_ID":
             voices[name] = vid
     return voices
