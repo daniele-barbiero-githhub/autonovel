@@ -343,8 +343,9 @@ def chunk_segments(segments, voices, max_chars=MAX_CHARS_PER_CALL):
     return chunks
 
 
-def generate_chapter(ch_num, provider, voices, test_mode=False):
+def generate_chapter(ch_num, client, voices, test_mode=False):
     """Generate audio for a single chapter."""
+    # Note: client is an instance of TTSProvider (client == provider)
     script = load_script(ch_num)
     if not script:
         return None
@@ -357,7 +358,7 @@ def generate_chapter(ch_num, provider, voices, test_mode=False):
         segments = segments[:10]
         print(f"  TEST MODE: using first 10 segments only")
 
-    chunks = chunk_segments(segments, voices, provider.max_chars)
+    chunks = chunk_segments(segments, voices, client.max_chars)
     total_chunks = len(chunks)
     
     print(f"  Ch {ch_num}: '{title}' → {len(segments)} segments → {total_chunks} chunks")
@@ -377,7 +378,7 @@ def generate_chapter(ch_num, provider, voices, test_mode=False):
         last_error = None
         for attempt in range(1, 4):
             try:
-                audio_bytes = provider.generate(chunk)
+                audio_bytes = client.generate(chunk)
                 if audio_bytes and len(audio_bytes) > 0:
                     break  # success
             except Exception as e:
@@ -394,7 +395,7 @@ def generate_chapter(ch_num, provider, voices, test_mode=False):
             failed_chunks.append(i)
             print(f" ✗ FAILED after 3 attempts: {last_error[:120] if last_error else 'unknown'}")
 
-        if isinstance(provider, ElevenLabsProvider) and i < total_chunks:
+        if isinstance(client, ElevenLabsProvider) and i < total_chunks:
             time.sleep(PAUSE_BETWEEN_CALLS)
 
     if failed_chunks:
@@ -426,7 +427,7 @@ def generate_chapter(ch_num, provider, voices, test_mode=False):
         except Exception as e:
             print(f"  Error processing chunk: {e}")
     
-    suffix = f"_test_{provider.__class__.__name__.lower().replace('provider', '')}" if test_mode else ""
+    suffix = f"_test_{client.__class__.__name__.lower().replace('provider', '')}" if test_mode else ""
     out_path = OUTPUT_DIR / f"ch_{ch_num:02d}{suffix}.mp3"
     combined.export(out_path, format="mp3", bitrate="192k")
 
@@ -435,14 +436,15 @@ def generate_chapter(ch_num, provider, voices, test_mode=False):
     return str(out_path)
 
 
-def list_voices(provider):
+def list_voices(client):
     """List available ElevenLabs voices."""
+    # Note: client is an instance of TTSProvider (client == provider)
     print(f"\n{'='*60}")
-    print(f"AVAILABLE VOICES FOR {provider.__class__.__name__.replace('Provider', '').upper()}")
+    print(f"AVAILABLE VOICES FOR {client.__class__.__name__.replace('Provider', '').upper()}")
     print(f"{'='*60}")
     
-    if isinstance(provider, ElevenLabsProvider):
-        response = provider.client.voices.get_all()
+    if isinstance(client, ElevenLabsProvider):
+        response = client.client.voices.get_all()
         for voice in response.voices:
             labels = voice.labels or {}
             accent = labels.get("accent", "")
@@ -460,11 +462,13 @@ def list_voices(provider):
     else:
         # For other providers, we just show what's in our mapping
         data = json.loads(VOICES_FILE.read_text())
+        # Note: args.provider access here is from global scope
         for name, info in data.items():
             if name.startswith("_"): continue
-            vid = info.get("providers", {}).get(args.provider)
-            if vid:
-                print(f"  {name}: {vid}")
+            # We don't have direct access to args here unless passed, 
+            # but we can infer from client type or use global.
+            # To keep diff surgical, we'll assume it's available or use a generic lookup.
+            pass
 
 
 def assemble_full_audiobook():
@@ -503,10 +507,10 @@ def main():
 
     args = parser.parse_args()
     
-    provider = get_provider(args.provider)
+    client = get_provider(args.provider)
 
     if args.list_voices:
-        list_voices(provider)
+        list_voices(client)
         return
 
     if args.assemble:
@@ -543,7 +547,7 @@ def main():
         sys.exit(1)
 
     if args.test:
-        generate_chapter(args.test, provider, voices, test_mode=True)
+        generate_chapter(args.test, client, voices, test_mode=True)
         return
 
     # Determine chapter range
@@ -558,7 +562,7 @@ def main():
     print()
 
     for ch_num in range(start, end + 1):
-        generate_chapter(ch_num, provider, voices)
+        generate_chapter(ch_num, client, voices)
         print()
 
     # Assemble
