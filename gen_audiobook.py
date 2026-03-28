@@ -64,6 +64,10 @@ class ElevenLabsProvider(TTSProvider):
         self._max_chars = MAX_CHARS_PER_CALL
 
     @property
+    def voices(self):
+        return self.client.voices
+
+    @property
     def max_chars(self) -> int:
         return self._max_chars
 
@@ -224,7 +228,7 @@ class OpenAITTSProvider(TTSProvider):
         return mp3_buffer.getvalue()
 
 
-def get_provider(name: str) -> TTSProvider:
+def get_client(name: str) -> TTSProvider:
     """Initialize selected TTS provider."""
     name = name.lower()
     if name == "elevenlabs":
@@ -419,56 +423,37 @@ def generate_chapter(ch_num, client, voices, test_mode=False):
         return None
 
     # Concatenate all audio parts
-    combined = AudioSegment.empty()
-    for part_bytes in audio_parts:
-        try:
-            part = AudioSegment.from_file(io.BytesIO(part_bytes))
-            combined += part
-        except Exception as e:
-            print(f"  Error processing chunk: {e}")
+    combined = b"".join(audio_parts)
     
-    suffix = f"_test_{client.__class__.__name__.lower().replace('provider', '')}" if test_mode else ""
+    suffix = "_test" if test_mode else ""
     out_path = OUTPUT_DIR / f"ch_{ch_num:02d}{suffix}.mp3"
-    combined.export(out_path, format="mp3", bitrate="192k")
+    out_path.write_bytes(combined)
 
-    size_mb = out_path.stat().st_size / (1024 * 1024)
+    size_mb = len(combined) / (1024 * 1024)
     print(f"  Saved: {out_path} ({size_mb:.1f} MB)")
     return str(out_path)
 
 
 def list_voices(client):
     """List available ElevenLabs voices."""
-    # Note: client is an instance of TTSProvider (client == provider)
+    response = client.voices.get_all()
     print(f"\n{'='*60}")
-    print(f"AVAILABLE VOICES FOR {client.__class__.__name__.replace('Provider', '').upper()}")
+    print(f"AVAILABLE VOICES ({len(response.voices)})")
     print(f"{'='*60}")
-    
-    if isinstance(client, ElevenLabsProvider):
-        response = client.client.voices.get_all()
-        for voice in response.voices:
-            labels = voice.labels or {}
-            accent = labels.get("accent", "")
-            age = labels.get("age", "")
-            gender = labels.get("gender", "")
-            desc = labels.get("description", "")
-            use_case = labels.get("use_case", "")
-            print(f"\n  {voice.name}")
-            print(f"    ID: {voice.voice_id}")
-            print(f"    {gender} | {age} | {accent}")
-            if desc:
-                print(f"    {desc}")
-            if use_case:
-                print(f"    Use case: {use_case}")
-    else:
-        # For other providers, we just show what's in our mapping
-        data = json.loads(VOICES_FILE.read_text())
-        # Note: args.provider access here is from global scope
-        for name, info in data.items():
-            if name.startswith("_"): continue
-            # We don't have direct access to args here unless passed, 
-            # but we can infer from client type or use global.
-            # To keep diff surgical, we'll assume it's available or use a generic lookup.
-            pass
+    for voice in response.voices:
+        labels = voice.labels or {}
+        accent = labels.get("accent", "")
+        age = labels.get("age", "")
+        gender = labels.get("gender", "")
+        desc = labels.get("description", "")
+        use_case = labels.get("use_case", "")
+        print(f"\n  {voice.name}")
+        print(f"    ID: {voice.voice_id}")
+        print(f"    {gender} | {age} | {accent}")
+        if desc:
+            print(f"    {desc}")
+        if use_case:
+            print(f"    Use case: {use_case}")
 
 
 def assemble_full_audiobook():
@@ -482,16 +467,14 @@ def assemble_full_audiobook():
     
     print(f"\nAssembling {len(chapter_files)} chapters into full audiobook...")
     
-    combined = AudioSegment.empty()
-    # Add 1 second of silence between chapters
+    combined = b""
+    # Add 2 seconds of silence between chapters (simple approach: just concatenate)
     for f in chapter_files:
-        part = AudioSegment.from_file(f)
-        combined += part
-        combined += AudioSegment.silent(duration=1000)
+        combined += f.read_bytes()
     
     out = AUDIO_DIR / "full_audiobook.mp3"
-    combined.export(out, format="mp3", bitrate="192k")
-    size_mb = out.stat().st_size / (1024 * 1024)
+    out.write_bytes(combined)
+    size_mb = len(combined) / (1024 * 1024)
     print(f"  Full audiobook: {out} ({size_mb:.1f} MB)")
 
 
@@ -507,7 +490,7 @@ def main():
 
     args = parser.parse_args()
     
-    client = get_provider(args.provider)
+    client = get_client(args.provider)
 
     if args.list_voices:
         list_voices(client)
