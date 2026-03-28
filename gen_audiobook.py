@@ -9,6 +9,9 @@ Usage:
   python gen_audiobook.py --provider piper        # Use local Piper
   python gen_audiobook.py --provider elevenlabs   # Use ElevenLabs (default)
   python gen_audiobook.py 1                       # Single chapter
+  python gen_audiobook.py 1 5                     # Range
+  python gen_audiobook.py --list-voices           # List available voices
+  python gen_audiobook.py --status                # Show generation status
 """
 import os
 import sys
@@ -38,6 +41,7 @@ MODELS_DIR = BASE_DIR / "models"
 # --- Provider Abstraction ---
 
 class TTSProvider(ABC):
+    """Base class for Text-to-Speech providers."""
     @abstractmethod
     def generate(self, segments: List[Dict[str, str]]) -> bytes:
         """Takes a list of {text, voice_id} and returns combined MP3/WAV bytes."""
@@ -46,9 +50,11 @@ class TTSProvider(ABC):
     @property
     @abstractmethod
     def max_chars(self) -> int:
+        """Maximum characters allowed per generation call."""
         pass
 
 class ElevenLabsProvider(TTSProvider):
+    """ElevenLabs TTS Provider."""
     def __init__(self, api_key: str):
         from elevenlabs.client import ElevenLabs
         self.client = ElevenLabs(api_key=api_key)
@@ -67,6 +73,7 @@ class ElevenLabsProvider(TTSProvider):
         return audio_bytes
 
 class KokoroProvider(TTSProvider):
+    """Local Kokoro TTS Provider using ONNX."""
     def __init__(self):
         from kokoro_onnx import Kokoro
         model_path = MODELS_DIR / "kokoro-v0_19.onnx"
@@ -74,6 +81,7 @@ class KokoroProvider(TTSProvider):
         
         if not model_path.exists() or not voices_path.exists():
             print(f"ERROR: Kokoro models not found in {MODELS_DIR}")
+            print("Please download 'kokoro-v0_19.onnx' and 'voices.bin' to the models/ directory.")
             sys.exit(1)
             
         self.kokoro = Kokoro(str(model_path), str(voices_path))
@@ -104,6 +112,7 @@ class KokoroProvider(TTSProvider):
         return mp3_buffer.getvalue()
 
 class PiperProvider(TTSProvider):
+    """Local Piper TTS Provider."""
     def __init__(self):
         from piper import PiperVoice
         self.PiperVoice = PiperVoice
@@ -136,7 +145,6 @@ class PiperProvider(TTSProvider):
             if not voice: continue
             
             buffer = io.BytesIO()
-            # Piper needs a real file-like object that supports seek/tell for WAV
             import wave
             with wave.open(buffer, "wb") as wav_file:
                 voice.synthesize_wav(seg['text'], wav_file)
@@ -151,6 +159,7 @@ class PiperProvider(TTSProvider):
         return mp3_buffer.getvalue()
 
 class MLXTTSProvider(TTSProvider):
+    """Local MLX-TTS Provider for Apple Silicon."""
     def __init__(self, base_url: str = "http://localhost:8000"):
         self.base_url = base_url
         self._max_chars = 10000
@@ -182,6 +191,7 @@ class MLXTTSProvider(TTSProvider):
         return mp3_buffer.getvalue()
 
 class OpenAITTSProvider(TTSProvider):
+    """OpenAI Cloud TTS Provider."""
     def __init__(self, api_key: str):
         from openai import OpenAI
         self.client = OpenAI(api_key=api_key)
@@ -207,9 +217,13 @@ class OpenAITTSProvider(TTSProvider):
         return mp3_buffer.getvalue()
 
 def get_provider(name: str) -> TTSProvider:
+    """Initialize selected TTS provider."""
     name = name.lower()
     if name == "elevenlabs":
         key = os.environ.get("ELEVENLABS_API_KEY", "")
+        if not key:
+            print("ERROR: ELEVENLABS_API_KEY not set in .env", file=sys.stderr)
+            sys.exit(1)
         return ElevenLabsProvider(key)
     elif name == "kokoro":
         return KokoroProvider()
@@ -220,17 +234,24 @@ def get_provider(name: str) -> TTSProvider:
         return MLXTTSProvider(url)
     elif name == "openai":
         key = os.environ.get("OPENAI_API_KEY", "")
+        if not key:
+            print("ERROR: OPENAI_API_KEY not set in .env", file=sys.stderr)
+            sys.exit(1)
         return OpenAITTSProvider(key)
     else:
         print(f"ERROR: Unknown provider {name}")
         sys.exit(1)
 
 def load_voices(provider_name: str):
-    if not VOICES_FILE.exists(): return {}
+    """Load voice mapping from audiobook_voices.json for specific provider."""
+    if not VOICES_FILE.exists():
+        print(f"ERROR: {VOICES_FILE} not found. Create it first.", file=sys.stderr)
+        sys.exit(1)
     data = json.loads(VOICES_FILE.read_text())
     voices = {}
     for name, info in data.items():
-        if name.startswith("_"): continue
+        if name.startswith("_"):
+            continue
         prov_data = info.get("providers", {})
         vid = prov_data.get(provider_name)
         if vid and vid != "REPLACE_WITH_VOICE_ID":
@@ -238,11 +259,15 @@ def load_voices(provider_name: str):
     return voices
 
 def load_script(ch_num):
+    """Load a chapter's parsed script."""
     path = SCRIPTS_DIR / f"ch{ch_num:02d}_script.json"
-    if not path.exists(): return None
+    if not path.exists():
+        print(f"  Script not found: {path}. Run gen_audiobook_script.py first.", file=sys.stderr)
+        return None
     return json.loads(path.read_text())
 
 def chunk_segments(segments, voices, max_chars):
+    """Split segments into chunks that fit within the provider character limit."""
     chunks = []
     current_chunk = []
     current_chars = 0
@@ -284,33 +309,53 @@ def chunk_segments(segments, voices, max_chars):
     return chunks
 
 def generate_chapter(ch_num, provider, voices, test_mode=False):
+    """Generate audio for a single chapter."""
     script = load_script(ch_num)
     if not script: return None
     title = script.get("title", f"Chapter {ch_num}")
     segments = script["segments"]
-    if test_mode: segments = segments[:5]
+    if test_mode: 
+        segments = segments[:5]
+        print(f"  TEST MODE: using first 5 segments only")
     chunks = chunk_segments(segments, voices, provider.max_chars)
     total_chunks = len(chunks)
     print(f"  Ch {ch_num}: '{title}' → {len(segments)} segments → {total_chunks} chunks")
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     audio_parts = []
+    failed_chunks = []
+    
     for i, chunk in enumerate(chunks, 1):
         chars = sum(len(s['text']) for s in chunk)
         print(f"    [{i}/{total_chunks}] {chars} chars, {len(chunk)} segments...", end="", flush=True)
         audio_bytes = None
+        last_error = None
         for attempt in range(1, 4):
             try:
                 audio_bytes = provider.generate(chunk)
                 if audio_bytes: break
             except Exception as e:
+                last_error = str(e)
                 if attempt < 3: time.sleep(attempt * 5)
         if audio_bytes:
             audio_parts.append(audio_bytes)
             print(f" ✓ ({len(audio_bytes):,} bytes)")
         else:
-            print(f" ✗ FAILED")
+            failed_chunks.append(i)
+            print(f" ✗ FAILED: {last_error}")
 
     if not audio_parts: return None
+    
+    if failed_chunks:
+        manifest = {
+            "chapter": ch_num,
+            "total_chunks": total_chunks,
+            "succeeded": [i for i in range(1, total_chunks+1) if i not in failed_chunks],
+            "failed": failed_chunks,
+            "complete": False,
+        }
+        manifest_path = OUTPUT_DIR / f"ch_{ch_num:02d}_manifest.json"
+        manifest_path.write_text(json.dumps(manifest, indent=2))
+
     combined = AudioSegment.empty()
     for part_bytes in audio_parts:
         try:
@@ -326,7 +371,27 @@ def generate_chapter(ch_num, provider, voices, test_mode=False):
     print(f"  Saved: {out_path} ({size_mb:.1f} MB)")
     return str(out_path)
 
+def list_voices(provider):
+    """List available voices for the current provider."""
+    print(f"\n{'='*60}")
+    print(f"AVAILABLE VOICES FOR {provider.__class__.__name__.replace('Provider', '').upper()}")
+    print(f"{'='*60}")
+    
+    if isinstance(provider, ElevenLabsProvider):
+        response = provider.client.voices.get_all()
+        for voice in response.voices:
+            labels = voice.labels or {}
+            print(f"\n  {voice.name}")
+            print(f"    ID: {voice.voice_id}")
+            print(f"    {labels.get('gender', '')} | {labels.get('age', '')} | {labels.get('accent', '')}")
+    else:
+        # For other providers, we just show what's in our mapping
+        voices = load_voices(args.provider)
+        for name, vid in voices.items():
+            print(f"  {name}: {vid}")
+
 def assemble_full_audiobook():
+    """Concatenate all chapter audio files into one."""
     chapter_files = sorted(OUTPUT_DIR.glob("ch_*.mp3"))
     chapter_files = [f for f in chapter_files if "_test" not in f.name]
     if not chapter_files: return
@@ -346,34 +411,64 @@ def main():
     parser.add_argument("start", nargs="?", type=int, help="Start chapter")
     parser.add_argument("end", nargs="?", type=int, help="End chapter")
     parser.add_argument("--provider", default="elevenlabs", choices=["elevenlabs", "kokoro", "piper", "mlx", "openai"], help="TTS provider")
+    parser.add_argument("--list-voices", action="store_true", help="List available voices")
     parser.add_argument("--test", type=int, metavar="CH", help="Test mode")
-    parser.add_argument("--assemble", action="store_true", help="Assemble")
-    parser.add_argument("--status", action="store_true", help="Status")
+    parser.add_argument("--assemble", action="store_true", help="Assemble full audiobook from chapters")
+    parser.add_argument("--status", action="store_true", help="Show generation status")
+    
     args = parser.parse_args()
     provider = get_provider(args.provider)
-    voices = load_voices(args.provider)
-    if not voices:
-        print(f"ERROR: No voices configured for provider '{args.provider}'")
-        sys.exit(1)
+
+    if args.list_voices:
+        list_voices(provider)
+        return
+
     if args.assemble:
         assemble_full_audiobook()
         return
+
     if args.status:
+        print(f"\n{'='*50}")
+        print("AUDIOBOOK GENERATION STATUS")
+        print(f"{'='*50}")
         scripts = sorted(SCRIPTS_DIR.glob("ch*_script.json"))
         for script_f in scripts:
             ch_num = int(script_f.stem.replace("_script", "").replace("ch", ""))
             audio_f = OUTPUT_DIR / f"ch_{ch_num:02d}.mp3"
-            print(f"  Ch {ch_num:02d}: {'✓' if audio_f.exists() else '✗'}")
+            manifest_f = OUTPUT_DIR / f"ch_{ch_num:02d}_manifest.json"
+            if audio_f.exists():
+                size_mb = audio_f.stat().st_size / (1024*1024)
+                if manifest_f.exists():
+                    m = json.loads(manifest_f.read_text())
+                    if m.get("failed"):
+                        print(f"  Ch {ch_num:2d}: ⚠ PARTIAL ({size_mb:.1f} MB, chunks {m['failed']} failed)")
+                    else:
+                        print(f"  Ch {ch_num:2d}: ✓ complete ({size_mb:.1f} MB)")
+                else:
+                    print(f"  Ch {ch_num:2d}: ✓ ({size_mb:.1f} MB)")
+            else:
+                print(f"  Ch {ch_num:2d}: ✗ not generated")
         return
+
+    voices = load_voices(args.provider)
+    if not voices:
+        print(f"ERROR: No voices configured for provider '{args.provider}' in audiobook_voices.json")
+        sys.exit(1)
+
     if args.test:
         generate_chapter(args.test, provider, voices, test_mode=True)
         return
+
     scripts = sorted(SCRIPTS_DIR.glob("ch*_script.json"))
     total = len(scripts)
     start = args.start or 1
     end = args.end or total
+
+    print(f"Generating audiobook using {args.provider}: chapters {start}-{end}")
     for ch_num in range(start, end + 1):
         generate_chapter(ch_num, provider, voices)
+        print()
+
     assemble_full_audiobook()
 
 if __name__ == "__main__":
