@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Generate audiobook from parsed scripts using multiple TTS providers.
-Supports ElevenLabs, Kokoro (Local), Piper (Local), MLX-TTS (Local), and OpenAI.
+Supports ElevenLabs, Kokoro (Local), Piper (Local), MLX-TTS (Local), KittenTTS (Local), and OpenAI.
 
 Usage:
   python gen_audiobook.py                # Generate all chapters (default: elevenlabs)
@@ -10,6 +10,7 @@ Usage:
   python gen_audiobook.py --list-voices  # List available voices
   python gen_audiobook.py --test 1       # Generate first segments of ch 1 (test)
   python gen_audiobook.py --provider mlx # Use local MLX-TTS
+  python gen_audiobook.py --provider kittentts # Use local KittenTTS
 """
 import os
 import sys
@@ -107,6 +108,37 @@ class KokoroProvider(TTSProvider):
             combined_audio.append(samples)
             sample_rate = sr
             combined_audio.append(np.zeros(int(sr * 0.1)))
+
+        if not combined_audio:
+            return b""
+        full_audio = np.concatenate(combined_audio)
+        buffer = io.BytesIO()
+        sf.write(buffer, full_audio, sample_rate, format='WAV')
+        buffer.seek(0)
+        audio_seg = AudioSegment.from_wav(buffer)
+        mp3_buffer = io.BytesIO()
+        audio_seg.export(mp3_buffer, format="mp3", bitrate="192k")
+        return mp3_buffer.getvalue()
+
+
+class KittenTTSProvider(TTSProvider):
+    """Local KittenTTS Provider."""
+    def __init__(self):
+        from kittentts import KittenTTS
+        self.model = KittenTTS("KittenML/kitten-tts-mini-0.8")
+        self._max_chars = 1000000
+
+    @property
+    def max_chars(self) -> int:
+        return self._max_chars
+
+    def generate(self, segments: List[Dict[str, str]]) -> bytes:
+        combined_audio = []
+        sample_rate = 24000
+        for seg in segments:
+            audio = self.model.generate(seg['text'], voice=seg['voice_id'])
+            combined_audio.append(audio)
+            combined_audio.append(np.zeros(int(sample_rate * 0.1)))
 
         if not combined_audio:
             return b""
@@ -239,6 +271,8 @@ def get_client(name: str) -> TTSProvider:
         return ElevenLabsProvider(key)
     elif name == "kokoro":
         return KokoroProvider()
+    elif name == "kittentts":
+        return KittenTTSProvider()
     elif name == "piper":
         return PiperProvider()
     elif name == "mlx":
@@ -482,7 +516,7 @@ def main():
     parser = argparse.ArgumentParser(description="Generate audiobook from parsed scripts")
     parser.add_argument("start", nargs="?", type=int, help="Start chapter")
     parser.add_argument("end", nargs="?", type=int, help="End chapter")
-    parser.add_argument("--provider", default="elevenlabs", choices=["elevenlabs", "kokoro", "piper", "mlx", "openai"], help="TTS provider")
+    parser.add_argument("--provider", default="elevenlabs", choices=["elevenlabs", "kokoro", "piper", "mlx", "kittentts", "openai"], help="TTS provider")
     parser.add_argument("--list-voices", action="store_true", help="List available voices")
     parser.add_argument("--test", type=int, metavar="CH", help="Test mode: first few segments of chapter")
     parser.add_argument("--assemble", action="store_true", help="Assemble full audiobook from chapters")

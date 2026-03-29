@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "elevenlabs>=2.39.0",
     "httpx>=0.28.1",
+    "kittentts",
     "kokoro-onnx>=0.5.0",
     "numpy>=2.4.3",
     "onnxruntime>=1.24.4",
@@ -15,3 +16,6 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "soundfile>=0.13.1",
 ]
+
+[tool.uv.sources]
+kittentts = { url = "https://github.com/KittenML/KittenTTS/releases/download/0.8.1/kittentts-0.8.1-py3-none-any.whl" }
