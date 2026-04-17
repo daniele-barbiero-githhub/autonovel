@@ -15,6 +15,8 @@ import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
+from utils import extract_text_from_response, get_max_tokens_with_thinking
+
 BASE_DIR = Path(__file__).parent
 load_dotenv(BASE_DIR / ".env")
 
@@ -25,6 +27,7 @@ ANTHROPIC_BETA = "context-1m-2025-08-07"
 
 
 def call_writer(prompt, max_tokens=4000):
+    max_tokens = get_max_tokens_with_thinking(max_tokens)
     import httpx
     headers = {
         "x-api-key": ANTHROPIC_API_KEY,
@@ -53,7 +56,7 @@ def call_writer(prompt, max_tokens=4000):
         timeout=120,
     )
     resp.raise_for_status()
-    return resp.json()["content"][0]["text"]
+    return extract_text_from_response(resp.json())
 
 
 GENERATE_PROMPT = """Generate {count} fantasy novel seed concepts. Each should be

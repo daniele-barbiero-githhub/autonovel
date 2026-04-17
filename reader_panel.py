@@ -14,6 +14,8 @@ from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
 
+from utils import extract_text_from_response, get_max_tokens_with_thinking
+
 BASE_DIR = Path(__file__).parent
 load_dotenv(BASE_DIR / ".env")
 
@@ -120,14 +122,14 @@ def call_reader(reader_key, arc_summary):
     }
     payload = {
         "model": JUDGE_MODEL,
-        "max_tokens": 4000,
+        "max_tokens": get_max_tokens_with_thinking(4000),
         "temperature": 0.7,  # Higher temp for personality
         "system": reader["system"],
         "messages": [{"role": "user", "content": READER_PROMPT.format(arc_summary=arc_summary)}],
     }
     resp = httpx.post(f"{API_BASE}/v1/messages", headers=headers, json=payload, timeout=300)
     resp.raise_for_status()
-    raw = resp.json()["content"][0]["text"]
+    raw = extract_text_from_response(resp.json())
     
     # Parse JSON
     raw = raw.strip()
