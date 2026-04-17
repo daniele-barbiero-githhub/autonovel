@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
+from utils import extract_text_from_response, get_max_tokens_with_thinking
+
 BASE_DIR = Path(__file__).parent
 load_dotenv(BASE_DIR / ".env")
 
@@ -13,6 +15,7 @@ API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 API_BASE = os.environ.get("AUTONOVEL_API_BASE_URL", "https://api.anthropic.com")
 
 def call_writer(prompt, max_tokens=16000):
+    max_tokens = get_max_tokens_with_thinking(max_tokens)
     import httpx
     headers = {
         "x-api-key": API_KEY,
@@ -33,7 +36,7 @@ def call_writer(prompt, max_tokens=16000):
     }
     resp = httpx.post(f"{API_BASE}/v1/messages", headers=headers, json=payload, timeout=600)
     resp.raise_for_status()
-    return resp.json()["content"][0]["text"]
+    return extract_text_from_response(resp.json())
 
 part1 = open('/tmp/outline_output.md').read()
 mystery = (BASE_DIR / "MYSTERY.md").read_text()
