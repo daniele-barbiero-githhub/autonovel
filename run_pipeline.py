@@ -46,6 +46,7 @@ MAX_REVISION_CYCLES = 6
 PLATEAU_DELTA = 0.3
 
 PHASE_ORDER = ["foundation", "drafting", "revision", "export"]
+CJK_CHAR_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 
 
 # ---------------------------------------------------------------------------
@@ -85,16 +86,16 @@ def save_state(state: dict):
 # Helpers: logging
 # ---------------------------------------------------------------------------
 
-def log_result(commit: str, phase: str, score, word_count: int,
+def log_result(commit: str, phase: str, score, char_count: int,
                status: str, description: str):
     """Append a row to results.tsv."""
-    header = "commit\tphase\tscore\tword_count\tstatus\tdescription\n"
+    header = "commit\tphase\tscore\tchar_count\tstatus\tdescription\n"
     if not RESULTS_FILE.exists():
         RESULTS_FILE.write_text(header)
     elif RESULTS_FILE.stat().st_size == 0:
         RESULTS_FILE.write_text(header)
     with open(RESULTS_FILE, "a") as f:
-        f.write(f"{commit}\t{phase}\t{score}\t{word_count}\t{status}\t{description}\n")
+        f.write(f"{commit}\t{phase}\t{score}\t{char_count}\t{status}\t{description}\n")
 
 
 def banner(text: str, char: str = "=", width: int = 60):
@@ -303,13 +304,23 @@ def parse_lore_score(stdout: str) -> float:
     return parse_score(stdout, "lore_score")
 
 
-def count_words_in_chapters() -> int:
-    """Sum word count across all chapter files."""
+def chinese_char_count(text: str) -> int:
+    """Count CJK ideographs instead of whitespace-delimited words."""
+    return len(CJK_CHAR_RE.findall(text))
+
+
+def count_chapter_chars() -> int:
+    """Sum Chinese character count across all chapter files."""
     total = 0
     if CHAPTERS_DIR.exists():
         for f in CHAPTERS_DIR.glob("ch_*.md"):
-            total += len(f.read_text().split())
+            total += chinese_char_count(f.read_text())
     return total
+
+
+def count_words_in_chapters() -> int:
+    """Backward-compatible alias for older status code."""
+    return count_chapter_chars()
 
 
 def count_chapter_files() -> int:
@@ -450,8 +461,8 @@ def run_drafting(state: dict) -> dict:
                 step("Chapter file missing or too short, retrying...")
                 continue
 
-            word_count = len(ch_file.read_text().split())
-            step(f"Drafted {word_count} words")
+            char_count = chinese_char_count(ch_file.read_text())
+            step(f"Drafted {char_count} Chinese chars")
 
             # Deterministic hard rules run in three scopes after every chapter:
             # current chapter, current volume, and current partial book.
@@ -459,7 +470,7 @@ def run_drafting(state: dict) -> dict:
             if hard_rules.returncode != 0:
                 last_failure = "hard rules"
                 step("Hard rules failed; discarding attempt before LLM evaluation")
-                log_result("discarded", f"ch{ch:02d}", "hard-rule-fail", word_count,
+                log_result("discarded", f"ch{ch:02d}", "hard-rule-fail", char_count,
                            "discard", f"Chapter {ch} attempt {attempt}: hard rules failed")
                 continue
 
@@ -468,7 +479,7 @@ def run_drafting(state: dict) -> dict:
             if eval_result.returncode != 0:
                 last_failure = "evaluation"
                 step("Evaluation failed after retries; retrying chapter attempt")
-                log_result("discarded", f"ch{ch:02d}", "eval-error", word_count,
+                log_result("discarded", f"ch{ch:02d}", "eval-error", char_count,
                            "discard", f"Chapter {ch} attempt {attempt}: evaluation failed")
                 continue
             score = parse_score(eval_result.stdout, "overall_score")
@@ -476,8 +487,8 @@ def run_drafting(state: dict) -> dict:
 
             if score >= CHAPTER_THRESHOLD:
                 commit_hash = git_add_commit(
-                    f"ch{ch:02d}: score {score}, {word_count}w")
-                log_result(commit_hash, f"ch{ch:02d}", score, word_count,
+                    f"ch{ch:02d}: score {score}, {char_count}c")
+                log_result(commit_hash, f"ch{ch:02d}", score, char_count,
                            "keep", f"Chapter {ch} (attempt {attempt})")
                 state["chapters_drafted"] = ch
                 save_state(state)
@@ -486,7 +497,7 @@ def run_drafting(state: dict) -> dict:
             else:
                 step(f"Score {score} < {CHAPTER_THRESHOLD}, discarding attempt")
                 last_failure = "score"
-                log_result("discarded", f"ch{ch:02d}", score, word_count,
+                log_result("discarded", f"ch{ch:02d}", score, char_count,
                            "discard", f"Chapter {ch} attempt {attempt}")
                 # Remove the bad chapter file so next attempt starts fresh
                 if ch_file.exists() and attempt < MAX_CHAPTER_ATTEMPTS:
@@ -503,10 +514,10 @@ def run_drafting(state: dict) -> dict:
             # Keep whatever we have and commit it
             ch_file = CHAPTERS_DIR / f"ch_{ch:02d}.md"
             if ch_file.exists():
-                word_count = len(ch_file.read_text().split())
+                char_count = chinese_char_count(ch_file.read_text())
                 commit_hash = git_add_commit(
                     f"ch{ch:02d}: best-effort after {MAX_CHAPTER_ATTEMPTS} attempts")
-                log_result(commit_hash, f"ch{ch:02d}", "?", word_count,
+                log_result(commit_hash, f"ch{ch:02d}", "?", char_count,
                            "forced", f"Chapter {ch}: kept after max attempts")
                 state["chapters_drafted"] = ch
                 save_state(state)
@@ -527,8 +538,8 @@ def run_drafting(state: dict) -> dict:
     state["revision_cycle"] = 0
     save_state(state)
 
-    total_words = count_words_in_chapters()
-    banner(f"DRAFTING COMPLETE — {total} chapters, {total_words} words")
+    total_chars = count_chapter_chars()
+    banner(f"DRAFTING COMPLETE — {total} chapters, {total_chars} Chinese chars")
     return state
 
 
@@ -719,7 +730,7 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
             post_score = parse_score(post_eval.stdout, "overall_score")
 
             ch_file = CHAPTERS_DIR / f"ch_{ch_num:02d}.md"
-            word_count = len(ch_file.read_text().split()) if ch_file.exists() else 0
+            char_count = chinese_char_count(ch_file.read_text()) if ch_file.exists() else 0
 
             step(f"Ch {ch_num}: {pre_score} -> {post_score}")
 
@@ -728,13 +739,13 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
                     f"revision cycle {cycle}: ch{ch_num:02d} "
                     f"{question} {pre_score}->{post_score}")
                 log_result(commit_hash, f"rev-ch{ch_num:02d}", post_score,
-                           word_count, "keep",
+                           char_count, "keep",
                            f"Cycle {cycle}: {question} improved {pre_score}->{post_score}")
             else:
                 step(f"Revision made it worse ({post_score} < {pre_score}), reverting")
                 git_reset_hard("HEAD")
                 log_result("reverted", f"rev-ch{ch_num:02d}", post_score,
-                           word_count, "discard",
+                           char_count, "discard",
                            f"Cycle {cycle}: {question} regressed {pre_score}->{post_score}")
 
         # -- Step 6: Full novel evaluation --
@@ -753,14 +764,14 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
             # Fallback: try overall_score
             novel_score = parse_score(full_eval.stdout, "overall_score")
 
-        total_words = count_words_in_chapters()
-        step(f"Novel score: {novel_score}  (prev: {prev_score}, words: {total_words})")
+        total_chars = count_chapter_chars()
+        step(f"Novel score: {novel_score}  (prev: {prev_score}, Chinese chars: {total_chars})")
 
         # Commit cycle results
         commit_hash = git_add_commit(
             f"revision cycle {cycle} complete: novel_score {novel_score}")
         log_result(commit_hash, f"revision-cycle-{cycle}", novel_score,
-                   total_words, "cycle",
+                   total_chars, "cycle",
                    f"Cycle {cycle}: novel_score {prev_score}->{novel_score}")
 
         state["novel_score"] = novel_score
@@ -920,8 +931,8 @@ def run_export(state: dict) -> dict:
 
     if parts:
         manuscript.write_text("\n\n---\n\n".join(parts) + "\n")
-        word_count = sum(len(p.split()) for p in parts)
-        step(f"Manuscript: {len(parts)} chapters, {word_count} words")
+        char_count = sum(chinese_char_count(p) for p in parts)
+        step(f"Manuscript: {len(parts)} chapters, {char_count} Chinese chars")
     else:
         step("WARNING: no chapter files found for manuscript")
 
@@ -949,15 +960,15 @@ def run_export(state: dict) -> dict:
 
     # 6. Final commit
     commit_hash = git_add_commit("export: manuscript, outline, arc summary, PDF")
-    total_words = count_words_in_chapters()
+    total_chars = count_chapter_chars()
     log_result(commit_hash, "export", state.get("novel_score", "?"),
-               total_words, "export", "Final export")
+               total_chars, "export", "Final export")
 
     state["phase"] = "complete"
     state["current_focus"] = "done"
     save_state(state)
 
-    banner(f"EXPORT COMPLETE — {len(chapter_files)} chapters, {total_words} words")
+    banner(f"EXPORT COMPLETE — {len(chapter_files)} chapters, {total_chars} Chinese chars")
     return state
 
 
@@ -1044,7 +1055,7 @@ def run_pipeline(args):
     print(f"  Phase:      {state.get('phase')}")
     print(f"  Foundation: {state.get('foundation_score', 0)}")
     print(f"  Chapters:   {state.get('chapters_drafted', 0)}/{state.get('chapters_total', '?')}")
-    print(f"  Words:      {count_words_in_chapters()}")
+    print(f"  Chinese chars: {count_chapter_chars()}")
     print(f"  Novel:      {state.get('novel_score', 0)}")
     print(f"  Cycles:     {state.get('revision_cycle', 0)}")
 

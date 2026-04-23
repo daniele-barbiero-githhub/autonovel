@@ -16,8 +16,12 @@ load_dotenv(BASE_DIR / ".env")
 WRITER_MODEL = model_for("writer", "claude-sonnet-4-6")
 STORY_TITLE = os.environ.get("AUTONOVEL_STORY_TITLE", "守望先锋：黑虹孤魂")
 CHAPTERS_DIR = BASE_DIR / "chapters"
+WRITER_MAX_TOKENS = int(os.environ.get("AUTONOVEL_WRITER_MAX_TOKENS", "32000"))
+MIN_CHAPTER_CHARS = int(os.environ.get("AUTONOVEL_MIN_CHAPTER_CHARS", "3800"))
+MAX_LENGTH_REPAIR_ATTEMPTS = int(os.environ.get("AUTONOVEL_LENGTH_REPAIR_ATTEMPTS", "2"))
+CJK_CHAR_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 
-def call_writer(prompt, max_tokens=16000):
+def call_writer(prompt, max_tokens=WRITER_MAX_TOKENS):
     return call_llm(
         prompt,
         role="writer",
@@ -35,6 +39,10 @@ def call_writer(prompt, max_tokens=16000):
         ),
         timeout=600,
     )
+
+def chinese_char_count(text):
+    """Count CJK ideographs instead of whitespace-delimited words."""
+    return len(CJK_CHAR_RE.findall(text))
 
 def load_file(path):
     try:
@@ -58,6 +66,97 @@ def extract_next_chapter_outline(outline_text, chapter_num):
         return "(final chapter)"
     lines = next_entry.split('\n')[:10]
     return '\n'.join(lines)
+
+def repair_short_chapter(
+    *,
+    chapter_num,
+    draft,
+    current_chars,
+    voice,
+    world,
+    characters,
+    canon,
+    chapter_outline,
+    next_chapter,
+    prev_tail,
+):
+    prompt = f"""The draft below is too short for Chapter {chapter_num} of "{STORY_TITLE}".
+
+Current Chinese character count: {current_chars}
+Required minimum Chinese character count: {MIN_CHAPTER_CHARS}
+
+Rewrite it as the COMPLETE final chapter, not an outline and not a continuation note.
+Return only the full chapter text from beginning to end.
+
+Expansion requirements:
+1. The rewritten chapter must contain at least {MIN_CHAPTER_CHARS} Chinese ideographs.
+2. Preserve the existing core events, POV, truth gates, chapter hook, and continuity.
+3. Expand by dramatizing underspecified beats as lived scenes: obstacles, physical cost,
+   dialogue under pressure, tactical choices, and consequences.
+4. Do not add early reveals. Before Chapter 20, do NOT reveal machines, candidates,
+   training-field truth, or true model ownership.
+5. Do not pad with recap, exposition, section summaries, or repeated descriptions.
+
+VOICE DEFINITION:
+{voice}
+
+THIS CHAPTER'S OUTLINE:
+{chapter_outline}
+
+NEXT CHAPTER'S OUTLINE:
+{next_chapter}
+
+PREVIOUS CHAPTER'S ENDING:
+{prev_tail}
+
+WORLD BIBLE:
+{world}
+
+CHARACTER REGISTRY:
+{characters}
+
+CANON / TRUTH GATES:
+{canon}
+
+TOO-SHORT DRAFT TO REWRITE:
+{draft}
+"""
+    return call_writer(prompt)
+
+def enforce_minimum_length(
+    *,
+    chapter_num,
+    result,
+    voice,
+    world,
+    characters,
+    canon,
+    chapter_outline,
+    next_chapter,
+    prev_tail,
+):
+    for attempt in range(1, MAX_LENGTH_REPAIR_ATTEMPTS + 1):
+        current_chars = chinese_char_count(result)
+        if current_chars >= MIN_CHAPTER_CHARS:
+            return result
+        print(
+            f"Chapter {chapter_num} too short: {current_chars} Chinese chars "
+            f"< {MIN_CHAPTER_CHARS}; length repair {attempt}/{MAX_LENGTH_REPAIR_ATTEMPTS}",
+            file=sys.stderr,
+        )
+        result = repair_short_chapter(
+            chapter_num=chapter_num,
+            draft=result,
+            current_chars=current_chars,
+            voice=voice,
+            world=world,
+            characters=characters,
+            canon=canon,
+            chapter_outline=chapter_outline,
+            next_chapter=next_chapter,
+            prev_tail=prev_tail,
+        )
+    return result
 
 def main():
     chapter_num = int(sys.argv[1])
@@ -105,7 +204,7 @@ CANON / TRUTH GATES (do not violate these):
 {canon}
 
 WRITING INSTRUCTIONS:
-1. Write the COMPLETE chapter in Simplified Chinese. Target ~3,000-4,500 Chinese characters unless the outline demands more.
+1. Write the COMPLETE chapter in Simplified Chinese. It must contain at least {MIN_CHAPTER_CHARS} Chinese characters; a shorter draft is a failed output and will be rewritten. Target ~3,800-4,800 Chinese characters unless the outline demands more.
 2. Use third-person limited POV. Follow this chapter's focus; default to 林彻 only when the outline does not imply another focal character.
 3. Hit ALL beats from the outline in order, but dramatize them as scenes with action, dialogue, tactical pressure, and physical consequence.
 4. Plant all foreshadowing elements listed under Plants / restrictions. Keep them subtle unless the canon says this chapter reveals them.
@@ -149,14 +248,34 @@ Write the chapter now. Full text, beginning to end.
 
     print(f"Drafting Chapter {chapter_num}...", file=sys.stderr)
     result = call_writer(prompt)
+    result = enforce_minimum_length(
+        chapter_num=chapter_num,
+        result=result,
+        voice=voice,
+        world=world,
+        characters=characters,
+        canon=canon,
+        chapter_outline=chapter_outline,
+        next_chapter=next_chapter,
+        prev_tail=prev_tail,
+    )
     
     # Save
     out_path = CHAPTERS_DIR / f"ch_{chapter_num:02d}.md"
     CHAPTERS_DIR.mkdir(exist_ok=True)
     out_path.write_text(result, encoding="utf-8")
+    final_chars = chinese_char_count(result)
     print(f"Saved to {out_path}", file=sys.stderr)
-    print(f"Word count: {len(result.split())}", file=sys.stderr)
+    print(f"Chinese character count: {final_chars}", file=sys.stderr)
+    if final_chars < MIN_CHAPTER_CHARS:
+        print(
+            f"ERROR: Chapter {chapter_num} is still below minimum length "
+            f"({final_chars} < {MIN_CHAPTER_CHARS})",
+            file=sys.stderr,
+        )
+        return 1
     print(result)
+    return 0
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

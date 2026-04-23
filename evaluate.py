@@ -131,19 +131,35 @@ CHINESE_AI_TELLS = [
 ]
 
 
+CJK_CHAR_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+
+
+def chinese_char_count(text):
+    """Count CJK ideographs for Chinese prose length/density metrics."""
+    return len(CJK_CHAR_RE.findall(text))
+
+
+def text_unit_count(text):
+    """Use Chinese characters for Chinese prose; fall back to whitespace words."""
+    cjk_chars = chinese_char_count(text)
+    if cjk_chars:
+        return cjk_chars
+    return len(text.split()) or 1
+
+
 def slop_score(text):
     """
     Mechanical slop detection. Returns a dict with:
       - tier1_hits: list of (word, count)
       - tier2_hits: list of (word, count)
       - tier3_hits: list of (pattern, count)
-      - em_dash_density: em dashes per 1000 words
+      - em_dash_density: em dashes per 1000 text units
       - sentence_length_cv: coefficient of variation (higher = more human)
       - transition_opener_ratio: fraction of paragraphs starting with transitions
       - slop_penalty: 0-10 deduction (0 = clean, 10 = pure slop)
     """
     words = text.lower().split()
-    word_count = len(words) or 1
+    word_count = text_unit_count(text)
 
     # Tier 1
     tier1_hits = []
@@ -178,10 +194,10 @@ def slop_score(text):
     em_dash_density = (em_dashes / word_count) * 1000
 
     # Sentence length variation (coefficient of variation)
-    sentences = re.split(r'[.!?]+', text)
-    sentences = [s.strip() for s in sentences if len(s.strip().split()) > 2]
+    sentences = re.split(r'[.!?。！？]+', text)
+    sentences = [s.strip() for s in sentences if text_unit_count(s.strip()) > 2]
     if len(sentences) > 2:
-        lengths = [len(s.split()) for s in sentences]
+        lengths = [text_unit_count(s) for s in sentences]
         mean_len = sum(lengths) / len(lengths)
         variance = sum((l - mean_len) ** 2 for l in lengths) / len(lengths)
         std_len = variance ** 0.5
@@ -790,11 +806,11 @@ def evaluate_full():
     summaries = []
     for num in sorted(chapters.keys()):
         text = chapters[num]
-        word_count = len(text.split())
+        char_count = chinese_char_count(text)
         head = text[:500]
         tail = text[-500:] if len(text) > 500 else ""
         summaries.append(
-            f"Chapter {num} ({word_count} words):\n"
+            f"Chapter {num} ({char_count} Chinese chars):\n"
             f"  Opening: {head}...\n"
             f"  Closing: ...{tail}\n"
         )
