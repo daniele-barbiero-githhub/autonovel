@@ -489,7 +489,7 @@ def run_drafting(state: dict) -> dict:
                 log_result("discarded", f"ch{ch:02d}", score, word_count,
                            "discard", f"Chapter {ch} attempt {attempt}")
                 # Remove the bad chapter file so next attempt starts fresh
-                if ch_file.exists():
+                if ch_file.exists() and attempt < MAX_CHAPTER_ATTEMPTS:
                     run_tool(f"git checkout -- chapters/ch_{ch:02d}.md 2>/dev/null || true")
 
         if not drafted:
