@@ -1,48 +1,43 @@
 #!/usr/bin/env python3
 """
 Build a condensed arc summary for full-novel evaluation.
-For each chapter: first 150 words, last 150 words, plus any dialogue.
-Gives the reader panel enough to evaluate the ARC without 72k tokens.
+For each chapter: opening, closing, plus key dialogue.
+Gives the reader panel enough to evaluate the ARC without the full manuscript.
 """
-import os
 import re
 from pathlib import Path
 from dotenv import load_dotenv
+from llm import call_llm, model_for
 
 BASE_DIR = Path(__file__).parent
 load_dotenv(BASE_DIR / ".env")
 
-WRITER_MODEL = os.environ.get("AUTONOVEL_WRITER_MODEL", "claude-sonnet-4-6")
-API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-API_BASE = os.environ.get("AUTONOVEL_API_BASE_URL", "https://api.anthropic.com")
+WRITER_MODEL = model_for("writer", "claude-sonnet-4-6")
 CHAPTERS_DIR = BASE_DIR / "chapters"
 
 def call_writer(prompt, max_tokens=4000):
-    import httpx
-    headers = {
-        "x-api-key": API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-    }
-    payload = {
-        "model": WRITER_MODEL,
-        "max_tokens": max_tokens,
-        "temperature": 0.1,
-        "system": "You summarize novel chapters precisely. State what HAPPENS, what CHANGES, and what QUESTIONS are left open. No evaluation. No praise. Just events and shifts.",
-        "messages": [{"role": "user", "content": prompt}],
-    }
-    resp = httpx.post(f"{API_BASE}/v1/messages", headers=headers, json=payload, timeout=120)
-    resp.raise_for_status()
-    return resp.json()["content"][0]["text"]
+    return call_llm(
+        prompt,
+        role="writer",
+        model=WRITER_MODEL,
+        max_tokens=max_tokens,
+        temperature=0.1,
+        system="You summarize novel chapters precisely. State what HAPPENS, what CHANGES, and what QUESTIONS are left open. No evaluation. No praise. Just events and shifts.",
+        timeout=120,
+    )
 
 def extract_key_passages(text):
     """Get opening, closing, and best dialogue from a chapter."""
     words = text.split()
-    opening = ' '.join(words[:150])
-    closing = ' '.join(words[-150:])
+    if len(words) > 20:
+        opening = ' '.join(words[:150])
+        closing = ' '.join(words[-150:])
+    else:
+        opening = text[:450]
+        closing = text[-450:]
     
     # Extract dialogue lines
-    dialogue = re.findall(r'["""]([^"""]{20,})["""]', text)
+    dialogue = re.findall(r'[“"「](.{20,}?)[”"」]', text)
     # Pick up to 3 longest dialogue lines
     dialogue.sort(key=len, reverse=True)
     top_dialogue = dialogue[:3]
@@ -51,10 +46,17 @@ def extract_key_passages(text):
 
 def main():
     summaries = []
+    chapter_files = sorted(CHAPTERS_DIR.glob("ch_*.md"))
+    if not chapter_files:
+        print("No chapter files found.")
+        return
     
-    for ch in range(1, 20):
-        path = CHAPTERS_DIR / f"ch_{ch:02d}.md"
-        text = path.read_text()
+    for path in chapter_files:
+        match = re.search(r"ch_(\d+)\.md$", path.name)
+        if not match:
+            continue
+        ch = int(match.group(1))
+        text = path.read_text(encoding="utf-8")
         wc = len(text.split())
         opening, closing, dialogue = extract_key_passages(text)
         
@@ -80,24 +82,21 @@ def main():
         print(f"Ch {ch}: summarized ({wc}w)")
     
     # Calculate total word count
-    total_wc = sum(len((CHAPTERS_DIR / f"ch_{c:02d}.md").read_text().split()) for c in range(1, 20))
+    total_wc = sum(len(path.read_text(encoding="utf-8").split()) for path in chapter_files)
     
     # Assemble
-    full = f"""# THE SECOND SON OF THE HOUSE OF BELLS
+    full = f"""# 守望先锋：黑虹孤魂
 ## Full-Arc Summary for Reader Panel
 
 This document contains chapter summaries, opening/closing passages,
-and key dialogue for all 23 chapters. Total novel: {total_wc:,} words.
+and key dialogue for {len(chapter_files)} drafted chapters. Total tokenized word count: {total_wc:,}.
 
-PREMISE: In Cantamura, a city where law is sung into binding through
-specific musical intervals, 14-year-old Cass Bellwright can hear when
-someone is lying -- a quarter-tone between F and F-sharp that causes
-him physical pain. His older brother Perin has been bound to service
-in the House of Corda for 10 years through a contract their father
-allowed. The bells their family maintains contain a secret: a question
-("Do you consent to be bound?") embedded in the sub-harmonics by the
-city's founder 200 years ago. No one has ever heard it. No one has
-ever answered. Every binding in Cantamura is technically void.
+PREMISE: In an Overwatch: Invasion AU, Null Sector starts the Black
+Rainbow Protocol to manufacture omnic officer-candidates from the
+combat data of human heroes. The candidates are given false human lives
+inside a stitched training city built from Rio, Toronto, Gothenburg, and
+King's Row mission data. They are meant to wake, delete the human dream,
+and become weapons for Ramattra. Instead, the dream teaches them to refuse.
 
 ---
 
@@ -105,7 +104,7 @@ ever answered. Every binding in Cantamura is technically void.
     full += '\n---\n\n'.join(summaries)
     
     out_path = BASE_DIR / "arc_summary.md"
-    out_path.write_text(full)
+    out_path.write_text(full, encoding="utf-8")
     print(f"\nSaved to {out_path} ({len(full.split())} words)")
 
 if __name__ == "__main__":

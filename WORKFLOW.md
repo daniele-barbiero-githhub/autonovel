@@ -11,7 +11,7 @@ For the full technical pipeline specification, see [PIPELINE.md](PIPELINE.md).
 ```bash
 # 1. Setup
 cd ~/autonovel
-cp .env.example .env   # Add your Anthropic API key
+cp .env.example .env   # Add your Anthropic or Gemini API key
 
 # 2. Generate a seed concept (or write your own in seed.txt)
 uv run python seed.py
@@ -62,6 +62,9 @@ uv run python evaluate.py --full                # Score the whole novel
 ```bash
 uv run python adversarial_edit.py all           # Find cuts in all chapters
 uv run python apply_cuts.py all --types OVER-EXPLAIN REDUNDANT
+uv run python tools/chapter_hard_rules.py --chapter 5
+uv run python tools/volume_hard_rules.py --chapter 5
+uv run python tools/book_hard_rules.py --through-chapter 5
 uv run python reader_panel.py                   # 4-persona evaluation
 uv run python review.py                         # Opus dual-persona review
 uv run python gen_brief.py --auto               # Auto-generate revision brief

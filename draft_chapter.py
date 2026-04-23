@@ -8,41 +8,33 @@ import re
 import sys
 from pathlib import Path
 from dotenv import load_dotenv
+from llm import call_llm, model_for
 
 BASE_DIR = Path(__file__).parent
 load_dotenv(BASE_DIR / ".env")
 
-WRITER_MODEL = os.environ.get("AUTONOVEL_WRITER_MODEL", "claude-sonnet-4-6")
-API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-API_BASE = os.environ.get("AUTONOVEL_API_BASE_URL", "https://api.anthropic.com")
+WRITER_MODEL = model_for("writer", "claude-sonnet-4-6")
+STORY_TITLE = os.environ.get("AUTONOVEL_STORY_TITLE", "守望先锋：黑虹孤魂")
 CHAPTERS_DIR = BASE_DIR / "chapters"
 
 def call_writer(prompt, max_tokens=16000):
-    import httpx
-    headers = {
-        "x-api-key": API_KEY,
-        "anthropic-version": "2023-06-01",
-        "anthropic-beta": "context-1m-2025-08-07",
-        "content-type": "application/json",
-    }
-    payload = {
-        "model": WRITER_MODEL,
-        "max_tokens": max_tokens,
-        "temperature": 0.8,
-        "system": (
-            "You are a literary fiction writer drafting a fantasy novel chapter. "
-            "You write in third-person limited past tense, locked to one POV character. "
-            "You follow the voice definition exactly. You hit every beat in the outline. "
-            "You never use words from the banned list. You show, never tell emotions. "
-            "Your prose is specific, sensory, grounded. Metaphors come from the character's "
-            "experience. You vary sentence length. You trust the reader. "
-            "You write the FULL chapter -- do not truncate, summarize, or skip ahead."
+    return call_llm(
+        prompt,
+        role="writer",
+        model=WRITER_MODEL,
+        max_tokens=max_tokens,
+        temperature=0.8,
+        system=(
+            "You are drafting a Chinese Overwatch: Invasion AU fan novel chapter. "
+            "Write in Simplified Chinese. Use third-person limited POV, constrained by "
+            "the current focal character's knowledge. Follow the project voice, canon, "
+            "truth gates, and chapter outline exactly. Hit every beat as lived scenes, "
+            "not summary. Preserve official Overwatch anchors while making AU elements "
+            "clearly non-canon branch material. Never reveal truths earlier than canon "
+            "allows. Write the FULL chapter -- do not truncate, summarize, or skip ahead."
         ),
-        "messages": [{"role": "user", "content": prompt}],
-    }
-    resp = httpx.post(f"{API_BASE}/v1/messages", headers=headers, json=payload, timeout=600)
-    resp.raise_for_status()
-    return resp.json()["content"][0]["text"]
+        timeout=600,
+    )
 
 def load_file(path):
     try:
@@ -52,7 +44,10 @@ def load_file(path):
 
 def extract_chapter_outline(outline_text, chapter_num):
     """Extract a specific chapter's outline entry."""
-    pattern = rf'### Ch {chapter_num}:.*?(?=### Ch {chapter_num + 1}:|## Foreshadowing|$)'
+    pattern = (
+        rf'###\s+(?:Ch|Chapter)\s+0*{chapter_num}\s*:.*?'
+        rf'(?=###\s+(?:Ch|Chapter)\s+0*{chapter_num + 1}\s*:|##\s+Foreshadowing|$)'
+    )
     match = re.search(pattern, outline_text, re.DOTALL)
     return match.group(0).strip() if match else "(not found)"
 
@@ -86,7 +81,7 @@ def main():
     else:
         prev_tail = "(first chapter -- no previous)"
     
-    prompt = f"""Write Chapter {chapter_num} of "The Second Son of the House of Bells."
+    prompt = f"""Write Chapter {chapter_num} of "{STORY_TITLE}".
 
 VOICE DEFINITION (follow this exactly):
 {voice}
@@ -106,30 +101,30 @@ WORLD BIBLE (reference for worldbuilding details):
 CHARACTER REGISTRY (reference for speech patterns and behavior):
 {characters}
 
+CANON / TRUTH GATES (do not violate these):
+{canon}
+
 WRITING INSTRUCTIONS:
-1. Write the COMPLETE chapter. Target ~3,200 words. Do not truncate or summarize.
-2. Third-person limited, past tense, locked to Cass's POV.
-3. Hit ALL numbered beats from the outline in order.
-4. Plant ALL foreshadowing elements listed under "Plants."
-5. Show sensory detail: what Cass hears, smells, feels physically.
-6. The under-note causes specific physical pain (needle behind left eye, not vague discomfort).
-7. Dialogue follows the speech patterns defined in characters.md.
-8. No banned words from voice.md Part 1 guardrails.
-9. No AI fiction tells: no "a sense of," no "couldn't help but feel," no "eyes widened."
-10. Vary sentence length. Short sentences for impact. Longer ones to build.
-11. Metaphors from Cass's experience: sound, bronze, craft, the body's response to pitch.
-12. Trust the reader. Don't explain what scenes mean. Let them land.
-13. Start the chapter in scene, not with exposition. End on a moment, not a summary.
+1. Write the COMPLETE chapter in Simplified Chinese. Target ~3,000-4,500 Chinese characters unless the outline demands more.
+2. Use third-person limited POV. Follow this chapter's focus; default to 林彻 only when the outline does not imply another focal character.
+3. Hit ALL beats from the outline in order, but dramatize them as scenes with action, dialogue, tactical pressure, and physical consequence.
+4. Plant all foreshadowing elements listed under Plants / restrictions. Keep them subtle unless the canon says this chapter reveals them.
+5. Before Chapter 20, do NOT reveal that the protagonists are machines or candidates. Body horror must appear as stress, smoke, low blood sugar, visual noise, dry throat, pulse-checking, or other misread pseudo-physiology.
+6. In Chapter 20, reveal the black-rainbow training field and A/C/K/P/S candidate identities, but 林彻 still shows only **[数据缺失]**.
+7. Before Chapter 24, do NOT confirm 林彻 as R-732 Shepherd. Before Chapter 48, do NOT name the testimony broadcast solution as the final plan.
+8. Official Overwatch heroes are not converted machines. They are the original heroes; the protagonists are AU omnic copies/countermeasure bodies built from combat data.
+9. Dialogue follows characters.md and voice.md: 林彻短句压情绪，唐晚医生式分诊，韩序用嘴碎抗压，周砚嘴硬少说，裴临承担落点，沈清禾以结构和出口表达秩序边界。
+10. Do not make Ramattra a shallow villain. His question must hurt because the world gives it evidence.
+11. Every power use has cost: injury, overheated joints, trust fracture, collateral damage, permission-chain pollution, lost resources, or delayed rescue.
+12. Show emotion through actions, tactical choices, body feedback, interrupted speech, and sensory detail. Do not explain what the scene already proves.
+13. Start in scene, not exposition. End on the chapter's specific hook or irreversible turn.
 
 PATTERNS TO AVOID (these have been flagged in previous chapters):
 14. NO triadic sensory lists. Never "X. Y. Z." or "X and Y and Z" as three
     separate items in a row. Combine two, cut one, or restructure.
-15. NO "He did not [verb]" more than once per chapter. Convert negatives
-    to active alternatives or just cut them.
-16. NO "He thought about [X]" constructions. Replace with: the thought
-    itself as a fragment, a physical action, or dialogue.
-17. NO "the way [X] did [Y]" as a simile connector more than twice per
-    chapter. Use different simile structures or cut the comparison.
+15. Avoid formulaic negative narration and repeated "不是X，而是Y" sentence shapes.
+16. Avoid "他想起/她意识到" exposition loops. Replace with concrete image, physical response, action, or dialogue.
+17. Do not overuse fixed simile connectors. Metaphors must come from Overwatch war tech, omnic bodies, damaged city infrastructure, hard light, ballistics, medical triage, cooling fans, optics, and battlefield comms.
 18. NO over-explaining after showing. If a scene demonstrates something,
     do not have the narrator restate it. Trust the scene.
 19. NO section breaks (---) as rhythm crutches. Only use for genuine
@@ -137,9 +132,7 @@ PATTERNS TO AVOID (these have been flagged in previous chapters):
 20. VARY paragraph length deliberately. Never more than 3 consecutive
     paragraphs of similar length. Include at least one 1-2 sentence
     paragraph and one 6+ sentence paragraph.
-21. END the chapter differently from previous chapters. Do NOT end with
-    Cass outside listening to his father work. Find the ending that
-    belongs to THIS chapter specifically.
+21. END the chapter on the hook required by this chapter, not on a generic ominous beat.
 22. INCLUDE at least one moment that surprises -- a character saying
     the wrong thing, an emotional beat arriving early or late, a detail
     that doesn't fit the expected pattern. Predictable excellence is
@@ -149,7 +142,7 @@ PATTERNS TO AVOID (these have been flagged in previous chapters):
     summary (narrator compressing time).
 24. DIALOGUE should sound like speech, not prose. Characters should
     occasionally stumble, interrupt, trail off, or say something
-    slightly wrong. A 14-year-old does not speak in polished epigrams.
+    slightly wrong. Nobody speaks in polished thesis statements during a firefight.
 
 Write the chapter now. Full text, beginning to end.
 """
@@ -159,7 +152,8 @@ Write the chapter now. Full text, beginning to end.
     
     # Save
     out_path = CHAPTERS_DIR / f"ch_{chapter_num:02d}.md"
-    out_path.write_text(result)
+    CHAPTERS_DIR.mkdir(exist_ok=True)
+    out_path.write_text(result, encoding="utf-8")
     print(f"Saved to {out_path}", file=sys.stderr)
     print(f"Word count: {len(result.split())}", file=sys.stderr)
     print(result)

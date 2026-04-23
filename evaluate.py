@@ -15,7 +15,6 @@ to tune what "good" means. The agent treats it as a black box.
 
 import argparse
 import json
-import os
 import sys
 import glob
 import re
@@ -27,16 +26,12 @@ BASE_DIR = Path(__file__).parent
 
 # Load .env file if present
 from dotenv import load_dotenv
+from llm import call_llm, model_for
 load_dotenv(BASE_DIR / ".env")
 
 # Judge uses Opus 4.6 (harsh, critical). Writer uses Sonnet 4.6 (fast, long context).
 # Intentionally different to avoid self-congratulation.
-JUDGE_MODEL = os.environ.get("AUTONOVEL_JUDGE_MODEL", "claude-opus-4-6")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-API_BASE_URL = os.environ.get("AUTONOVEL_API_BASE_URL", "https://api.anthropic.com")
-
-# Beta header to unlock 1M context window on both Opus 4.6 and Sonnet 4.6
-ANTHROPIC_BETA = "context-1m-2025-08-07"
+JUDGE_MODEL = model_for("judge", "claude-opus-4-6")
 CHAPTERS_DIR = BASE_DIR / "chapters"
 EVAL_LOG_DIR = BASE_DIR / "eval_logs"
 EVAL_LOG_DIR.mkdir(exist_ok=True)
@@ -119,6 +114,22 @@ TELLING_PATTERNS = [
     r"\b(?:angrily|sadly|happily|nervously|excitedly|desperately|furiously|anxiously|guiltily|bitterly|wearily|miserably)\b",
 ]
 
+# Chinese AI tells: vague similes, placeholder mystery, and formulaic contrast.
+CHINESE_AI_TELLS = [
+    (r"像是", "vague_simile"),
+    (r"就像", "vague_simile"),
+    (r"仿佛", "vague_simile"),
+    (r"好像", "vague_simile"),
+    (r"如同", "vague_simile"),
+    (r"似乎", "hedge"),
+    (r"某种", "placeholder_mystery"),
+    (r"什么东西", "placeholder_mystery"),
+    (r"说不清", "placeholder_mystery"),
+    (r"不太对劲", "placeholder_mystery"),
+    (r"不是.{1,30}而是", "formulaic_contrast"),
+    (r"不是那种.{1,30}而是", "formulaic_contrast"),
+]
+
 
 def slop_score(text):
     """
@@ -199,6 +210,23 @@ def slop_score(text):
     for pattern in TELLING_PATTERNS:
         telling_count += len(re.findall(pattern, text, re.IGNORECASE))
 
+    # Chinese AI tells
+    chinese_tells = []
+    chinese_tell_count = 0
+    chinese_simile_count = 0
+    chinese_formula_count = 0
+    for pattern, category in CHINESE_AI_TELLS:
+        matches = re.findall(pattern, text)
+        count = len(matches)
+        if not count:
+            continue
+        chinese_tells.append((pattern, category, count))
+        chinese_tell_count += count
+        if category == "vague_simile":
+            chinese_simile_count += count
+        elif category == "formulaic_contrast":
+            chinese_formula_count += count
+
     # Structural AI tics (rhetorical formulas)
     structural_tics = []
     for pattern in STRUCTURAL_AI_TICS:
@@ -220,6 +248,11 @@ def slop_score(text):
         penalty += min(transition_ratio * 2, 1.0)  # transition abuse: up to 1 pt
     penalty += min(fiction_tell_count * 0.3, 2.0)     # fiction AI tells: up to 2 pts
     penalty += min(telling_count * 0.2, 1.5)          # show-don't-tell: up to 1.5 pts
+    penalty += min(chinese_tell_count * 0.18, 3.0)    # Chinese AI tells: up to 3 pts
+    if chinese_simile_count > 5:
+        penalty += min((chinese_simile_count - 5) * 0.25, 1.5)
+    if chinese_formula_count > 1:
+        penalty += min((chinese_formula_count - 1) * 0.75, 2.0)
     penalty += min(structural_tic_count * 0.5, 2.0)   # structural AI tics: up to 2 pts
 
     penalty = min(penalty, 10.0)
@@ -231,6 +264,10 @@ def slop_score(text):
         "tier3_hits": tier3_hits,
         "fiction_ai_tells": fiction_tells,
         "structural_ai_tics": structural_tics,
+        "chinese_ai_tells": chinese_tells,
+        "chinese_ai_tell_count": chinese_tell_count,
+        "chinese_simile_count": chinese_simile_count,
+        "chinese_formula_count": chinese_formula_count,
         "telling_violations": telling_count,
         "em_dash_density": round(em_dash_density, 2),
         "sentence_length_cv": round(sentence_length_cv, 3),
@@ -273,35 +310,18 @@ def load_all_chapters():
 
 
 def call_judge(prompt, max_tokens=2000):
-    """Call the Anthropic judge LLM and return its response text."""
-    import httpx
-
-    headers = {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "anthropic-beta": ANTHROPIC_BETA,
-        "content-type": "application/json",
-    }
-    payload = {
-        "model": JUDGE_MODEL,
-        "max_tokens": max_tokens,
-        "temperature": 0.3,
-        "system": "You are a literary critic and novel editor. "
-                  "You evaluate fiction with precision. Always respond with valid JSON. "
-                  "No markdown fences, no preamble -- just the JSON object.",
-        "messages": [
-            {"role": "user", "content": prompt},
-        ],
-    }
-
-    resp = httpx.post(
-        f"{API_BASE_URL}/v1/messages",
-        headers=headers,
-        json=payload,
+    """Call the configured judge LLM and return its response text."""
+    return call_llm(
+        prompt,
+        role="judge",
+        model=JUDGE_MODEL,
+        max_tokens=max_tokens,
+        temperature=0.3,
+        system="You are a literary critic and novel editor. "
+               "You evaluate fiction with precision. Always respond with valid JSON. "
+               "No markdown fences, no preamble -- just the JSON object.",
         timeout=180,
     )
-    resp.raise_for_status()
-    return resp.json()["content"][0]["text"]
 
 
 def parse_json_response(text):
@@ -395,9 +415,10 @@ CROSS-CHECKS (perform these before scoring):
    - Deduct from character_distinctiveness if multiple characters
      share the same sentence structures
 2. Check for missing NEGATIVE SPACE -- what's absent?
-   - Are there gaps in the magic system that would block a specific
-     plot scene? (e.g., can Cass hear lies in written documents?
-     What happens during the climax -- what rule resolves it?)
+   - Are there gaps in the ability/AU system that would block a specific
+     plot scene? (e.g., what can 黑虹训练场 simulate, when can 死神 delete
+     a dream, what are R-732 Shepherd authority limits, and what rule
+     resolves the climax?)
    - Are there characters needed for the plot who don't exist?
    - Are there scenes the outline demands that the world can't support?
 3. Check for CONVENIENT GAPS vs DELIBERATE MYSTERY:
@@ -451,8 +472,7 @@ CHARACTER:
   Check for REPEATED STRUCTURAL FORMULAS across characters (e.g.,
   multiple characters using "X. Not Y." or balanced antithesis).
   Check that metaphor domains don't overlap. Check that speech
-  patterns reflect character background (a 14-year-old should not
-  sound like a 60-year-old merchant).
+  patterns reflect character background, body, faction, and stress state.
 - character_secrets: Each major character's secret should be something
   that, if revealed, changes the plot's trajectory. Vague secrets
   ("he knows more than he says") score lower than specific ones
@@ -577,7 +597,8 @@ CROSS-CHECKS (perform before scoring):
    summarize instead of dramatize.
 2. DIALOGUE REALISM: Read all dialogue aloud (mentally). Does it
    sound like speech or like written prose? Do characters say things
-   a 14-year-old / 60-year-old / etc. would actually say?
+   their role, age, stress state, and relationship to the scene would
+   actually produce?
 3. SCENE VS SUMMARY: How much of the chapter is in-scene (moment
    by moment, with dialogue and action) vs summary (narrator
    compressing time)? Chapters heavy on summary score lower on
@@ -610,10 +631,11 @@ Score these dimensions:
 
 - character_voice: Remove all dialogue tags mentally. Can you tell who's
   speaking? Do characters ever sound alike? Does dialogue read as speech
-  or as written prose? Does Cass sound like a specific 14-year-old, or
-  like "young protagonist"? Does anyone say something surprising -- not
-  just the right thing, but a REAL thing? Characters who never stumble,
-  hesitate, or say something slightly wrong are AI-pattern characters.
+  or as written prose? Do 林彻、唐晚、韩序、周砚、裴临、沈清禾 and the official
+  Overwatch heroes keep distinct voices? Does anyone say something
+  surprising -- not just the right thing, but a REAL thing? Characters
+  who never stumble, hesitate, or say something slightly wrong are
+  AI-pattern characters.
 
 - plants_seeded: Were foreshadowing elements placed naturally? A plant
   that's obvious is worse than a plant that's invisible. Score based on
@@ -621,7 +643,8 @@ Score these dimensions:
 
 - prose_quality: Sentence variety (measure: do 3+ consecutive sentences
   start the same way?). Specificity (concrete nouns > abstract).
-  Metaphors from Cass's experience, not from a thesaurus. Show-don't-tell
+  Metaphors from the focal character's body, role, and battlefield experience,
+  not from a thesaurus. Show-don't-tell
   at emotional peaks. QUOTE the weakest sentence and explain why. Also
   check for: repeated phrases, leaned-on constructions, paragraphs that
   could be cut without loss.
