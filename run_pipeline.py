@@ -154,6 +154,23 @@ def uv_run(script: str, timeout: int = 600) -> subprocess.CompletedProcess:
     return run_tool(python_command(script), timeout=timeout)
 
 
+def uv_run_retry(
+    script: str,
+    *,
+    timeout: int = 600,
+    attempts: int = 3,
+) -> subprocess.CompletedProcess:
+    """Run a Python project script, retrying transient subprocess failures."""
+    last_result = subprocess.CompletedProcess(script, returncode=1, stdout="", stderr="")
+    for attempt in range(1, attempts + 1):
+        if attempt > 1:
+            step(f"Retrying {script} ({attempt}/{attempts})")
+        last_result = uv_run(script, timeout=timeout)
+        if last_result.returncode == 0:
+            return last_result
+    return last_result
+
+
 def hard_rule_command(script: str, args: str = "") -> str:
     suffix = f" {args}" if args else ""
     return python_command(f"tools/{script}{suffix}")
@@ -355,7 +372,9 @@ def run_foundation(state: dict) -> dict:
 
         # 2. Evaluate
         step("Evaluating foundation...")
-        eval_result = uv_run("evaluate.py --phase=foundation", timeout=300)
+        eval_result = uv_run_retry("evaluate.py --phase=foundation", timeout=300)
+        if eval_result.returncode != 0:
+            raise RuntimeError("Foundation evaluation failed after retries")
         score = parse_score(eval_result.stdout, "overall_score")
         lore = parse_lore_score(eval_result.stdout)
 
@@ -445,7 +464,13 @@ def run_drafting(state: dict) -> dict:
                 continue
 
             # Evaluate
-            eval_result = uv_run(f"evaluate.py --chapter={ch}", timeout=300)
+            eval_result = uv_run_retry(f"evaluate.py --chapter={ch}", timeout=300)
+            if eval_result.returncode != 0:
+                last_failure = "evaluation"
+                step("Evaluation failed after retries; retrying chapter attempt")
+                log_result("discarded", f"ch{ch:02d}", "eval-error", word_count,
+                           "discard", f"Chapter {ch} attempt {attempt}: evaluation failed")
+                continue
             score = parse_score(eval_result.stdout, "overall_score")
             step(f"Chapter {ch} score: {score}")
 
@@ -468,9 +493,9 @@ def run_drafting(state: dict) -> dict:
                     run_tool(f"git checkout -- chapters/ch_{ch:02d}.md 2>/dev/null || true")
 
         if not drafted:
-            if last_failure == "hard rules":
+            if last_failure in {"hard rules", "evaluation"}:
                 raise RuntimeError(
-                    f"Chapter {ch} failed deterministic hard rules after "
+                    f"Chapter {ch} failed {last_failure} after "
                     f"{MAX_CHAPTER_ATTEMPTS} attempts"
                 )
             step(f"WARNING: Chapter {ch} failed all {MAX_CHAPTER_ATTEMPTS} attempts, "
@@ -637,7 +662,9 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
             banner(f"  Revising Ch {ch_num} ({question}) [{idx+1}/{len(consensus_items)}]", ".")
 
             # Snapshot the current chapter score for comparison
-            pre_eval = uv_run(f"evaluate.py --chapter={ch_num}", timeout=300)
+            pre_eval = uv_run_retry(f"evaluate.py --chapter={ch_num}", timeout=300)
+            if pre_eval.returncode != 0:
+                raise RuntimeError(f"Chapter {ch_num} pre-revision evaluation failed after retries")
             pre_score = parse_score(pre_eval.stdout, "overall_score")
 
             # Generate revision brief
@@ -686,7 +713,9 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
             )
 
             # Evaluate revised chapter
-            post_eval = uv_run(f"evaluate.py --chapter={ch_num}", timeout=300)
+            post_eval = uv_run_retry(f"evaluate.py --chapter={ch_num}", timeout=300)
+            if post_eval.returncode != 0:
+                raise RuntimeError(f"Chapter {ch_num} post-revision evaluation failed after retries")
             post_score = parse_score(post_eval.stdout, "overall_score")
 
             ch_file = CHAPTERS_DIR / f"ch_{ch_num:02d}.md"
@@ -715,7 +744,9 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
         )
 
         step("Running full novel evaluation...")
-        full_eval = uv_run("evaluate.py --full", timeout=600)
+        full_eval = uv_run_retry("evaluate.py --full", timeout=600)
+        if full_eval.returncode != 0:
+            raise RuntimeError("Full novel evaluation failed after retries")
         novel_score = parse_score(full_eval.stdout, "novel_score")
 
         if novel_score < 0:
