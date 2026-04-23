@@ -7,6 +7,7 @@ import argparse
 import re
 from pathlib import Path
 
+from chapter_hard_rules import scan_file
 from hard_rules_common import (
     Finding,
     VOLUMES,
@@ -184,6 +185,10 @@ def scan_volume(
                         volume=volume["id"],
                     )
                 )
+
+    for path in paths:
+        if path.exists():
+            findings.extend(scan_file(path))
 
     findings.extend(_scan_volume_forbidden(volume, paths))
     findings.extend(

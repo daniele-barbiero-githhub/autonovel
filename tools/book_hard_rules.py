@@ -8,12 +8,14 @@ import re
 
 from hard_rules_common import (
     Finding,
+    VOLUMES,
     chapter_path,
     emit_findings,
     exit_code,
     finding,
     missing_chapter_finding,
 )
+from volume_hard_rules import scan_volume
 
 
 BOOK_REQUIRED = [
@@ -140,11 +142,23 @@ def scan_book(
     through_chapter: int | None = None,
 ) -> list[Finding]:
     findings: list[Finding] = []
+    upper = through_chapter or 50
 
     if require_complete:
         for chapter in range(1, 51):
             if not chapter_path(chapter).exists():
                 findings.append(missing_chapter_finding(chapter, scope="book"))
+
+    for volume in VOLUMES:
+        if volume["start"] > upper:
+            continue
+        findings.extend(
+            scan_volume(
+                volume,
+                require_complete=require_complete,
+                through_chapter=through_chapter,
+            )
+        )
 
     findings.extend(_scan_book_forbidden(through_chapter))
     findings.extend(

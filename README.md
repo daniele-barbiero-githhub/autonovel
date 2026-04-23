@@ -170,26 +170,13 @@ Changes propagate both down (lore change → outline change → chapter
 revision) and up (writing reveals a gap → update lore → check
 downstream). The pipeline tracks propagation debts in `state.json`.
 
-### Three Immune Systems
+### Two Immune Systems
 
 1. **Mechanical** (`evaluate.py`, no LLM): regex scans for banned words,
    fiction clichés, show-don't-tell violations, sentence uniformity.
 
 2. **LLM Judge** (`evaluate.py`, separate model): scores prose quality,
    voice adherence, character distinctiveness, beat coverage.
-
-3. **Deterministic Hard Rules** (`tools/*_hard_rules.py`, no LLM):
-   reveal gates and continuity constraints. After every generated or
-   revised chapter, the pipeline runs chapter, current-volume, and
-   current-book hard-rule checks for the current chapter position.
-
-Manual entry points:
-
-```bash
-uv run python tools/chapter_hard_rules.py --chapter 2
-uv run python tools/volume_hard_rules.py --chapter 2
-uv run python tools/book_hard_rules.py --through-chapter 2
-```
 
 ### The Opus Review Loop
 

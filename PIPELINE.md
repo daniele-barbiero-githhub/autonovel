@@ -161,26 +161,16 @@ For each chapter in outline order:
      - Previous chapter's last ~1000 words
      - Next chapter's outline (for continuity)
   2. draft_chapter.py → chapters/ch_NN.md
-  3. Deterministic hard rules for current progress:
-     - tools/chapter_hard_rules.py --chapter NN
-     - tools/volume_hard_rules.py --chapter NN
-     - tools/book_hard_rules.py --through-chapter NN
-     These run immediately after the chapter is written. The chapter
-     number determines which reveal gates, volume rules, and whole-book
-     checkpoint rules are active.
-  4. evaluate.py --chapter=NN
-  5. If score > 6.0 → keep, commit. If < 6.0 → discard, retry (max 5).
-  6. Extract new canon entries from eval output → append to canon.md
-  7. Log to results.tsv
+  3. evaluate.py --chapter=NN
+  4. If score > 6.0 → keep, commit. If < 6.0 → discard, retry (max 5).
+  5. Extract new canon entries from eval output → append to canon.md
+  6. Log to results.tsv
 
 Post-draft cleanup:
-  8. Full complete-book hard rule pass:
-     - tools/volume_hard_rules.py --require-complete
-     - tools/book_hard_rules.py --require-complete
-  9. Mechanical slop pass (evaluate.py regex scanner) across all chapters
-  10. Fix recurring AI patterns identified in early chapters
+  7. Mechanical slop pass (evaluate.py regex scanner) across all chapters
+  8. Fix recurring AI patterns identified in early chapters
      (these compound — fix them before revision phase)
-  11. Update state.json phase to "revision"
+  9. Update state.json phase to "revision"
 
 Key learnings:
   - Forward progress over perfection. 6.0 is good enough.

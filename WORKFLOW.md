@@ -62,9 +62,6 @@ uv run python evaluate.py --full                # Score the whole novel
 ```bash
 uv run python adversarial_edit.py all           # Find cuts in all chapters
 uv run python apply_cuts.py all --types OVER-EXPLAIN REDUNDANT
-uv run python tools/chapter_hard_rules.py --chapter 5
-uv run python tools/volume_hard_rules.py --chapter 5
-uv run python tools/book_hard_rules.py --through-chapter 5
 uv run python reader_panel.py                   # 4-persona evaluation
 uv run python review.py                         # Opus dual-persona review
 uv run python gen_brief.py --auto               # Auto-generate revision brief

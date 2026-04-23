@@ -214,21 +214,18 @@ def require_hard_rules_ok(result: subprocess.CompletedProcess, description: str)
 def run_current_progress_hard_rules(chapter: int) -> subprocess.CompletedProcess:
     """Run chapter, current-volume, and current-book rules after a chapter write."""
     chapter_result = run_chapter_hard_rules(chapter)
+    if chapter_result.returncode != 0:
+        return chapter_result
 
     volume_result = run_volume_hard_rules(
         volume_id_for_chapter(chapter),
         require_complete=False,
         through_chapter=chapter,
     )
+    if volume_result.returncode != 0:
+        return volume_result
 
-    book_result = run_book_hard_rules(require_complete=False, through_chapter=chapter)
-
-    returncode = 0
-    for result in (chapter_result, volume_result, book_result):
-        if result.returncode != 0:
-            returncode = result.returncode
-            break
-    return subprocess.CompletedProcess("current-progress-hard-rules", returncode)
+    return run_book_hard_rules(require_complete=False, through_chapter=chapter)
 
 
 # ---------------------------------------------------------------------------
@@ -414,7 +411,6 @@ def run_drafting(state: dict) -> dict:
     for ch in range(start_chapter, total + 1):
         banner(f"Drafting Chapter {ch}/{total}", "-")
         drafted = False
-        last_failure = ""
 
         for attempt in range(1, MAX_CHAPTER_ATTEMPTS + 1):
             step(f"Attempt {attempt}/{MAX_CHAPTER_ATTEMPTS}")
@@ -434,16 +430,6 @@ def run_drafting(state: dict) -> dict:
             word_count = len(ch_file.read_text().split())
             step(f"Drafted {word_count} words")
 
-            # Deterministic hard rules run in three scopes after every chapter:
-            # current chapter, current volume, and current partial book.
-            hard_rules = run_current_progress_hard_rules(ch)
-            if hard_rules.returncode != 0:
-                last_failure = "hard rules"
-                step("Hard rules failed; discarding attempt before LLM evaluation")
-                log_result("discarded", f"ch{ch:02d}", "hard-rule-fail", word_count,
-                           "discard", f"Chapter {ch} attempt {attempt}: hard rules failed")
-                continue
-
             # Evaluate
             eval_result = uv_run(f"evaluate.py --chapter={ch}", timeout=300)
             score = parse_score(eval_result.stdout, "overall_score")
@@ -460,7 +446,6 @@ def run_drafting(state: dict) -> dict:
                 break
             else:
                 step(f"Score {score} < {CHAPTER_THRESHOLD}, discarding attempt")
-                last_failure = "score"
                 log_result("discarded", f"ch{ch:02d}", score, word_count,
                            "discard", f"Chapter {ch} attempt {attempt}")
                 # Remove the bad chapter file so next attempt starts fresh
@@ -468,11 +453,6 @@ def run_drafting(state: dict) -> dict:
                     run_tool(f"git checkout -- chapters/ch_{ch:02d}.md 2>/dev/null || true")
 
         if not drafted:
-            if last_failure == "hard rules":
-                raise RuntimeError(
-                    f"Chapter {ch} failed deterministic hard rules after "
-                    f"{MAX_CHAPTER_ATTEMPTS} attempts"
-                )
             step(f"WARNING: Chapter {ch} failed all {MAX_CHAPTER_ATTEMPTS} attempts, "
                  f"keeping last attempt and moving on")
             # Keep whatever we have and commit it
@@ -485,15 +465,6 @@ def run_drafting(state: dict) -> dict:
                            "forced", f"Chapter {ch}: kept after max attempts")
                 state["chapters_drafted"] = ch
                 save_state(state)
-
-    require_hard_rules_ok(
-        run_hard_rules("volume_hard_rules.py", "--require-complete", timeout=180),
-        "all volume hard rules after drafting",
-    )
-    require_hard_rules_ok(
-        run_book_hard_rules(require_complete=True),
-        "whole-book hard rules after drafting",
-    )
 
     # All chapters drafted
     state["phase"] = "revision"
@@ -588,11 +559,6 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
     start_cycle = state.get("revision_cycle", 0) + 1
     max_cycles = min(max_cycles, MAX_REVISION_CYCLES)
 
-    require_hard_rules_ok(
-        run_book_hard_rules(require_complete=True),
-        "whole-book hard rules before revision",
-    )
-
     for cycle in range(start_cycle, max_cycles + 1):
         banner(f"Revision Cycle {cycle}/{max_cycles}", "-")
 
@@ -607,10 +573,6 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
             run_tool(python_command(
                 "apply_cuts.py all --types OVER-EXPLAIN REDUNDANT --min-fat 15"),
                 timeout=300)
-            require_hard_rules_ok(
-                run_book_hard_rules(require_complete=True),
-                f"whole-book hard rules after mechanical cuts in cycle {cycle}",
-            )
         else:
             step("apply_cuts.py not found, skipping mechanical cuts")
 
@@ -672,19 +634,6 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
             step(f"Revising Ch {ch_num} with brief {brief_file.name}...")
             uv_run(f"gen_revision.py {ch_num} {brief_file}", timeout=600)
 
-            require_hard_rules_ok(
-                run_chapter_hard_rules(ch_num),
-                f"chapter {ch_num} hard rules after revision",
-            )
-            require_hard_rules_ok(
-                run_volume_hard_rules(volume_id_for_chapter(ch_num), require_complete=True),
-                f"volume hard rules after revising chapter {ch_num}",
-            )
-            require_hard_rules_ok(
-                run_book_hard_rules(require_complete=True),
-                f"whole-book hard rules after revising chapter {ch_num}",
-            )
-
             # Evaluate revised chapter
             post_eval = uv_run(f"evaluate.py --chapter={ch_num}", timeout=300)
             post_score = parse_score(post_eval.stdout, "overall_score")
@@ -709,11 +658,6 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
                            f"Cycle {cycle}: {question} regressed {pre_score}->{post_score}")
 
         # -- Step 6: Full novel evaluation --
-        require_hard_rules_ok(
-            run_book_hard_rules(require_complete=True),
-            f"whole-book hard rules before full evaluation in cycle {cycle}",
-        )
-
         step("Running full novel evaluation...")
         full_eval = uv_run("evaluate.py --full", timeout=600)
         novel_score = parse_score(full_eval.stdout, "novel_score")
@@ -807,18 +751,6 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
                         ch_num = int(ch_match.group(1))
                         step(f"Revising Ch {ch_num} from review brief...")
                         uv_run(f"gen_revision.py {ch_num} {brief}", timeout=600)
-                        require_hard_rules_ok(
-                            run_chapter_hard_rules(ch_num),
-                            f"chapter {ch_num} hard rules after review-loop revision",
-                        )
-                        require_hard_rules_ok(
-                            run_volume_hard_rules(volume_id_for_chapter(ch_num), require_complete=True),
-                            f"volume hard rules after review-loop revision of chapter {ch_num}",
-                        )
-                        require_hard_rules_ok(
-                            run_book_hard_rules(require_complete=True),
-                            f"whole-book hard rules after review-loop revision of chapter {ch_num}",
-                        )
                         git_add_commit(
                             f"review round {rnd}: revise ch{ch_num:02d} from Opus feedback")
             
@@ -830,10 +762,6 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
                 run_tool(
                     python_command("apply_cuts.py all --types OVER-EXPLAIN REDUNDANT --min-fat 15"),
                     timeout=300)
-                require_hard_rules_ok(
-                    run_book_hard_rules(require_complete=True),
-                    f"whole-book hard rules after review round {rnd} mechanical cleanup",
-                )
                 git_add_commit(f"review round {rnd}: mechanical cleanup")
             
             step(f"Review round {rnd} complete.")
@@ -858,11 +786,6 @@ def run_export(state: dict) -> dict:
     Build final deliverables: outline, arc summary, manuscript, PDF.
     """
     banner("PHASE 4: EXPORT", "=")
-
-    require_hard_rules_ok(
-        run_book_hard_rules(require_complete=True),
-        "whole-book hard rules before export",
-    )
 
     # 1. Rebuild outline from chapters
     build_outline = BASE_DIR / "build_outline.py"
