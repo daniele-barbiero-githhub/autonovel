@@ -1,1 +1,4 @@
 timestamp	phase	score	words	keep_discard	description
+discarded	ch01	1.75	61	discard	Chapter 1 attempt 1
+discarded	ch01	2.91	51	discard	Chapter 1 attempt 3
+discarded	ch01	-1.0	45	discard	Chapter 1 attempt 5
