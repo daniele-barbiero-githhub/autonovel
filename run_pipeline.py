@@ -35,6 +35,7 @@ CHAPTERS_DIR = BASE_DIR / "chapters"
 BRIEFS_DIR = BASE_DIR / "briefs"
 EDIT_LOGS_DIR = BASE_DIR / "edit_logs"
 EVAL_LOGS_DIR = BASE_DIR / "eval_logs"
+LOCAL_PYTHON = BASE_DIR / ".venv" / "bin" / "python"
 
 FOUNDATION_THRESHOLD = 7.5
 CHAPTER_THRESHOLD = 6.0
@@ -45,6 +46,7 @@ MAX_REVISION_CYCLES = 6
 PLATEAU_DELTA = 0.3
 
 PHASE_ORDER = ["foundation", "drafting", "revision", "export"]
+CJK_CHAR_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 
 
 # ---------------------------------------------------------------------------
@@ -84,16 +86,16 @@ def save_state(state: dict):
 # Helpers: logging
 # ---------------------------------------------------------------------------
 
-def log_result(commit: str, phase: str, score, word_count: int,
+def log_result(commit: str, phase: str, score, char_count: int,
                status: str, description: str):
     """Append a row to results.tsv."""
-    header = "commit\tphase\tscore\tword_count\tstatus\tdescription\n"
+    header = "commit\tphase\tscore\tchar_count\tstatus\tdescription\n"
     if not RESULTS_FILE.exists():
         RESULTS_FILE.write_text(header)
     elif RESULTS_FILE.stat().st_size == 0:
         RESULTS_FILE.write_text(header)
     with open(RESULTS_FILE, "a") as f:
-        f.write(f"{commit}\t{phase}\t{score}\t{word_count}\t{status}\t{description}\n")
+        f.write(f"{commit}\t{phase}\t{score}\t{char_count}\t{status}\t{description}\n")
 
 
 def banner(text: str, char: str = "=", width: int = 60):
@@ -141,9 +143,110 @@ def run_tool(cmd: str, timeout: int = 600, check: bool = False) -> subprocess.Co
         return fake
 
 
+def python_command(script: str) -> str:
+    """Build a Python command, preferring the project venv when present."""
+    if LOCAL_PYTHON.exists():
+        return f"{LOCAL_PYTHON} {script}"
+    return f"uv run python {script}"
+
+
 def uv_run(script: str, timeout: int = 600) -> subprocess.CompletedProcess:
-    """Shorthand for 'uv run python <script>' from project root."""
-    return run_tool(f"uv run python {script}", timeout=timeout)
+    """Run a Python project script from the project root."""
+    return run_tool(python_command(script), timeout=timeout)
+
+
+def uv_run_retry(
+    script: str,
+    *,
+    timeout: int = 600,
+    attempts: int = 3,
+) -> subprocess.CompletedProcess:
+    """Run a Python project script, retrying transient subprocess failures."""
+    last_result = subprocess.CompletedProcess(script, returncode=1, stdout="", stderr="")
+    for attempt in range(1, attempts + 1):
+        if attempt > 1:
+            step(f"Retrying {script} ({attempt}/{attempts})")
+        last_result = uv_run(script, timeout=timeout)
+        if last_result.returncode == 0:
+            return last_result
+    return last_result
+
+
+def hard_rule_command(script: str, args: str = "") -> str:
+    suffix = f" {args}" if args else ""
+    return python_command(f"tools/{script}{suffix}")
+
+
+def run_hard_rules(script: str, args: str = "", timeout: int = 120) -> subprocess.CompletedProcess:
+    """Run a deterministic hard-rule linter and print full findings on failure."""
+    result = run_tool(hard_rule_command(script, args), timeout=timeout)
+    if result.returncode != 0:
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
+    return result
+
+
+def run_chapter_hard_rules(chapter: int) -> subprocess.CompletedProcess:
+    step(f"Running chapter hard rules for Ch {chapter}...")
+    return run_hard_rules("chapter_hard_rules.py", f"--chapter {chapter}", timeout=60)
+
+
+def volume_id_for_chapter(chapter: int) -> int:
+    return ((chapter - 1) // 10) + 1
+
+
+def run_volume_hard_rules(
+    volume_id: int,
+    *,
+    require_complete: bool = True,
+    through_chapter: int | None = None,
+) -> subprocess.CompletedProcess:
+    args = f"--volume {volume_id}"
+    if through_chapter is not None:
+        args += f" --through-chapter {through_chapter}"
+    if require_complete:
+        args += " --require-complete"
+    step(f"Running volume hard rules for volume {volume_id}...")
+    return run_hard_rules("volume_hard_rules.py", args, timeout=120)
+
+
+def run_book_hard_rules(
+    *,
+    require_complete: bool = True,
+    through_chapter: int | None = None,
+) -> subprocess.CompletedProcess:
+    args = "--require-complete" if require_complete else ""
+    if through_chapter is not None:
+        args = f"{args} --through-chapter {through_chapter}".strip()
+    step("Running whole-book hard rules...")
+    return run_hard_rules("book_hard_rules.py", args, timeout=180)
+
+
+def require_hard_rules_ok(result: subprocess.CompletedProcess, description: str):
+    if result.returncode != 0:
+        raise RuntimeError(f"Hard-rule lint failed: {description}")
+
+
+def run_current_progress_hard_rules(chapter: int) -> subprocess.CompletedProcess:
+    """Run chapter, current-volume, and current-book rules after a chapter write."""
+    chapter_result = run_chapter_hard_rules(chapter)
+
+    volume_result = run_volume_hard_rules(
+        volume_id_for_chapter(chapter),
+        require_complete=False,
+        through_chapter=chapter,
+    )
+
+    book_result = run_book_hard_rules(require_complete=False, through_chapter=chapter)
+
+    returncode = 0
+    for result in (chapter_result, volume_result, book_result):
+        if result.returncode != 0:
+            returncode = result.returncode
+            break
+    return subprocess.CompletedProcess("current-progress-hard-rules", returncode)
 
 
 # ---------------------------------------------------------------------------
@@ -201,13 +304,23 @@ def parse_lore_score(stdout: str) -> float:
     return parse_score(stdout, "lore_score")
 
 
-def count_words_in_chapters() -> int:
-    """Sum word count across all chapter files."""
+def chinese_char_count(text: str) -> int:
+    """Count CJK ideographs instead of whitespace-delimited words."""
+    return len(CJK_CHAR_RE.findall(text))
+
+
+def count_chapter_chars() -> int:
+    """Sum Chinese character count across all chapter files."""
     total = 0
     if CHAPTERS_DIR.exists():
         for f in CHAPTERS_DIR.glob("ch_*.md"):
-            total += len(f.read_text().split())
+            total += chinese_char_count(f.read_text())
     return total
+
+
+def count_words_in_chapters() -> int:
+    """Backward-compatible alias for older status code."""
+    return count_chapter_chars()
 
 
 def count_chapter_files() -> int:
@@ -270,7 +383,9 @@ def run_foundation(state: dict) -> dict:
 
         # 2. Evaluate
         step("Evaluating foundation...")
-        eval_result = uv_run("evaluate.py --phase=foundation", timeout=300)
+        eval_result = uv_run_retry("evaluate.py --phase=foundation", timeout=300)
+        if eval_result.returncode != 0:
+            raise RuntimeError("Foundation evaluation failed after retries")
         score = parse_score(eval_result.stdout, "overall_score")
         lore = parse_lore_score(eval_result.stdout)
 
@@ -329,6 +444,7 @@ def run_drafting(state: dict) -> dict:
     for ch in range(start_chapter, total + 1):
         banner(f"Drafting Chapter {ch}/{total}", "-")
         drafted = False
+        last_failure = ""
 
         for attempt in range(1, MAX_CHAPTER_ATTEMPTS + 1):
             step(f"Attempt {attempt}/{MAX_CHAPTER_ATTEMPTS}")
@@ -345,18 +461,34 @@ def run_drafting(state: dict) -> dict:
                 step("Chapter file missing or too short, retrying...")
                 continue
 
-            word_count = len(ch_file.read_text().split())
-            step(f"Drafted {word_count} words")
+            char_count = chinese_char_count(ch_file.read_text())
+            step(f"Drafted {char_count} Chinese chars")
+
+            # Deterministic hard rules run in three scopes after every chapter:
+            # current chapter, current volume, and current partial book.
+            hard_rules = run_current_progress_hard_rules(ch)
+            if hard_rules.returncode != 0:
+                last_failure = "hard rules"
+                step("Hard rules failed; discarding attempt before LLM evaluation")
+                log_result("discarded", f"ch{ch:02d}", "hard-rule-fail", char_count,
+                           "discard", f"Chapter {ch} attempt {attempt}: hard rules failed")
+                continue
 
             # Evaluate
-            eval_result = uv_run(f"evaluate.py --chapter={ch}", timeout=300)
+            eval_result = uv_run_retry(f"evaluate.py --chapter={ch}", timeout=300)
+            if eval_result.returncode != 0:
+                last_failure = "evaluation"
+                step("Evaluation failed after retries; retrying chapter attempt")
+                log_result("discarded", f"ch{ch:02d}", "eval-error", char_count,
+                           "discard", f"Chapter {ch} attempt {attempt}: evaluation failed")
+                continue
             score = parse_score(eval_result.stdout, "overall_score")
             step(f"Chapter {ch} score: {score}")
 
             if score >= CHAPTER_THRESHOLD:
                 commit_hash = git_add_commit(
-                    f"ch{ch:02d}: score {score}, {word_count}w")
-                log_result(commit_hash, f"ch{ch:02d}", score, word_count,
+                    f"ch{ch:02d}: score {score}, {char_count}c")
+                log_result(commit_hash, f"ch{ch:02d}", score, char_count,
                            "keep", f"Chapter {ch} (attempt {attempt})")
                 state["chapters_drafted"] = ch
                 save_state(state)
@@ -364,25 +496,40 @@ def run_drafting(state: dict) -> dict:
                 break
             else:
                 step(f"Score {score} < {CHAPTER_THRESHOLD}, discarding attempt")
-                log_result("discarded", f"ch{ch:02d}", score, word_count,
+                last_failure = "score"
+                log_result("discarded", f"ch{ch:02d}", score, char_count,
                            "discard", f"Chapter {ch} attempt {attempt}")
                 # Remove the bad chapter file so next attempt starts fresh
-                if ch_file.exists():
+                if ch_file.exists() and attempt < MAX_CHAPTER_ATTEMPTS:
                     run_tool(f"git checkout -- chapters/ch_{ch:02d}.md 2>/dev/null || true")
 
         if not drafted:
+            if last_failure in {"hard rules", "evaluation"}:
+                raise RuntimeError(
+                    f"Chapter {ch} failed {last_failure} after "
+                    f"{MAX_CHAPTER_ATTEMPTS} attempts"
+                )
             step(f"WARNING: Chapter {ch} failed all {MAX_CHAPTER_ATTEMPTS} attempts, "
                  f"keeping last attempt and moving on")
             # Keep whatever we have and commit it
             ch_file = CHAPTERS_DIR / f"ch_{ch:02d}.md"
             if ch_file.exists():
-                word_count = len(ch_file.read_text().split())
+                char_count = chinese_char_count(ch_file.read_text())
                 commit_hash = git_add_commit(
                     f"ch{ch:02d}: best-effort after {MAX_CHAPTER_ATTEMPTS} attempts")
-                log_result(commit_hash, f"ch{ch:02d}", "?", word_count,
+                log_result(commit_hash, f"ch{ch:02d}", "?", char_count,
                            "forced", f"Chapter {ch}: kept after max attempts")
                 state["chapters_drafted"] = ch
                 save_state(state)
+
+    require_hard_rules_ok(
+        run_hard_rules("volume_hard_rules.py", "--require-complete", timeout=180),
+        "all volume hard rules after drafting",
+    )
+    require_hard_rules_ok(
+        run_book_hard_rules(require_complete=True),
+        "whole-book hard rules after drafting",
+    )
 
     # All chapters drafted
     state["phase"] = "revision"
@@ -391,8 +538,8 @@ def run_drafting(state: dict) -> dict:
     state["revision_cycle"] = 0
     save_state(state)
 
-    total_words = count_words_in_chapters()
-    banner(f"DRAFTING COMPLETE — {total} chapters, {total_words} words")
+    total_chars = count_chapter_chars()
+    banner(f"DRAFTING COMPLETE — {total} chapters, {total_chars} Chinese chars")
     return state
 
 
@@ -477,6 +624,11 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
     start_cycle = state.get("revision_cycle", 0) + 1
     max_cycles = min(max_cycles, MAX_REVISION_CYCLES)
 
+    require_hard_rules_ok(
+        run_book_hard_rules(require_complete=True),
+        "whole-book hard rules before revision",
+    )
+
     for cycle in range(start_cycle, max_cycles + 1):
         banner(f"Revision Cycle {cycle}/{max_cycles}", "-")
 
@@ -488,8 +640,13 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
         apply_cuts = BASE_DIR / "apply_cuts.py"
         if apply_cuts.exists():
             step("Applying mechanical cuts (OVER-EXPLAIN, REDUNDANT)...")
-            run_tool("uv run python apply_cuts.py all "
-                     "--types OVER-EXPLAIN REDUNDANT --min-fat 15", timeout=300)
+            run_tool(python_command(
+                "apply_cuts.py all --types OVER-EXPLAIN REDUNDANT --min-fat 15"),
+                timeout=300)
+            require_hard_rules_ok(
+                run_book_hard_rules(require_complete=True),
+                f"whole-book hard rules after mechanical cuts in cycle {cycle}",
+            )
         else:
             step("apply_cuts.py not found, skipping mechanical cuts")
 
@@ -516,7 +673,9 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
             banner(f"  Revising Ch {ch_num} ({question}) [{idx+1}/{len(consensus_items)}]", ".")
 
             # Snapshot the current chapter score for comparison
-            pre_eval = uv_run(f"evaluate.py --chapter={ch_num}", timeout=300)
+            pre_eval = uv_run_retry(f"evaluate.py --chapter={ch_num}", timeout=300)
+            if pre_eval.returncode != 0:
+                raise RuntimeError(f"Chapter {ch_num} pre-revision evaluation failed after retries")
             pre_score = parse_score(pre_eval.stdout, "overall_score")
 
             # Generate revision brief
@@ -524,7 +683,7 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
             gen_brief = BASE_DIR / "gen_brief.py"
             if gen_brief.exists():
                 step(f"Generating brief for Ch {ch_num}...")
-                run_tool(f"uv run python gen_brief.py --panel {ch_num}", timeout=300)
+                run_tool(python_command(f"gen_brief.py --panel {ch_num}"), timeout=300)
                 # gen_brief.py may write to briefs/ — find the most recent brief
                 brief_candidates = sorted(
                     BRIEFS_DIR.glob(f"ch{ch_num:02d}*.md"),
@@ -551,12 +710,27 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
             step(f"Revising Ch {ch_num} with brief {brief_file.name}...")
             uv_run(f"gen_revision.py {ch_num} {brief_file}", timeout=600)
 
+            require_hard_rules_ok(
+                run_chapter_hard_rules(ch_num),
+                f"chapter {ch_num} hard rules after revision",
+            )
+            require_hard_rules_ok(
+                run_volume_hard_rules(volume_id_for_chapter(ch_num), require_complete=True),
+                f"volume hard rules after revising chapter {ch_num}",
+            )
+            require_hard_rules_ok(
+                run_book_hard_rules(require_complete=True),
+                f"whole-book hard rules after revising chapter {ch_num}",
+            )
+
             # Evaluate revised chapter
-            post_eval = uv_run(f"evaluate.py --chapter={ch_num}", timeout=300)
+            post_eval = uv_run_retry(f"evaluate.py --chapter={ch_num}", timeout=300)
+            if post_eval.returncode != 0:
+                raise RuntimeError(f"Chapter {ch_num} post-revision evaluation failed after retries")
             post_score = parse_score(post_eval.stdout, "overall_score")
 
             ch_file = CHAPTERS_DIR / f"ch_{ch_num:02d}.md"
-            word_count = len(ch_file.read_text().split()) if ch_file.exists() else 0
+            char_count = chinese_char_count(ch_file.read_text()) if ch_file.exists() else 0
 
             step(f"Ch {ch_num}: {pre_score} -> {post_score}")
 
@@ -565,32 +739,39 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
                     f"revision cycle {cycle}: ch{ch_num:02d} "
                     f"{question} {pre_score}->{post_score}")
                 log_result(commit_hash, f"rev-ch{ch_num:02d}", post_score,
-                           word_count, "keep",
+                           char_count, "keep",
                            f"Cycle {cycle}: {question} improved {pre_score}->{post_score}")
             else:
                 step(f"Revision made it worse ({post_score} < {pre_score}), reverting")
                 git_reset_hard("HEAD")
                 log_result("reverted", f"rev-ch{ch_num:02d}", post_score,
-                           word_count, "discard",
+                           char_count, "discard",
                            f"Cycle {cycle}: {question} regressed {pre_score}->{post_score}")
 
         # -- Step 6: Full novel evaluation --
+        require_hard_rules_ok(
+            run_book_hard_rules(require_complete=True),
+            f"whole-book hard rules before full evaluation in cycle {cycle}",
+        )
+
         step("Running full novel evaluation...")
-        full_eval = uv_run("evaluate.py --full", timeout=600)
+        full_eval = uv_run_retry("evaluate.py --full", timeout=600)
+        if full_eval.returncode != 0:
+            raise RuntimeError("Full novel evaluation failed after retries")
         novel_score = parse_score(full_eval.stdout, "novel_score")
 
         if novel_score < 0:
             # Fallback: try overall_score
             novel_score = parse_score(full_eval.stdout, "overall_score")
 
-        total_words = count_words_in_chapters()
-        step(f"Novel score: {novel_score}  (prev: {prev_score}, words: {total_words})")
+        total_chars = count_chapter_chars()
+        step(f"Novel score: {novel_score}  (prev: {prev_score}, Chinese chars: {total_chars})")
 
         # Commit cycle results
         commit_hash = git_add_commit(
             f"revision cycle {cycle} complete: novel_score {novel_score}")
         log_result(commit_hash, f"revision-cycle-{cycle}", novel_score,
-                   total_words, "cycle",
+                   total_chars, "cycle",
                    f"Cycle {cycle}: novel_score {prev_score}->{novel_score}")
 
         state["novel_score"] = novel_score
@@ -624,7 +805,7 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
             # Step 2: Parse the review
             step("Parsing review...")
             parse_result = run_tool(
-                "uv run python review.py --parse", timeout=60)
+                python_command("review.py --parse"), timeout=60)
             print(parse_result.stdout if parse_result else "")
             
             # Step 3: Check stopping condition
@@ -654,7 +835,7 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
             gen_brief_py = BASE_DIR / "gen_brief.py"
             if gen_brief_py.exists():
                 # Auto mode: picks weakest chapter, cross-references all sources
-                run_tool("uv run python gen_brief.py --auto", timeout=300)
+                run_tool(python_command("gen_brief.py --auto"), timeout=300)
                 
                 # Find any generated briefs and apply the top one
                 recent_briefs = sorted(
@@ -668,6 +849,18 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
                         ch_num = int(ch_match.group(1))
                         step(f"Revising Ch {ch_num} from review brief...")
                         uv_run(f"gen_revision.py {ch_num} {brief}", timeout=600)
+                        require_hard_rules_ok(
+                            run_chapter_hard_rules(ch_num),
+                            f"chapter {ch_num} hard rules after review-loop revision",
+                        )
+                        require_hard_rules_ok(
+                            run_volume_hard_rules(volume_id_for_chapter(ch_num), require_complete=True),
+                            f"volume hard rules after review-loop revision of chapter {ch_num}",
+                        )
+                        require_hard_rules_ok(
+                            run_book_hard_rules(require_complete=True),
+                            f"whole-book hard rules after review-loop revision of chapter {ch_num}",
+                        )
                         git_add_commit(
                             f"review round {rnd}: revise ch{ch_num:02d} from Opus feedback")
             
@@ -677,8 +870,12 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
             apply_cuts_py = BASE_DIR / "apply_cuts.py"
             if apply_cuts_py.exists():
                 run_tool(
-                    "uv run python apply_cuts.py all --types OVER-EXPLAIN REDUNDANT --min-fat 15",
+                    python_command("apply_cuts.py all --types OVER-EXPLAIN REDUNDANT --min-fat 15"),
                     timeout=300)
+                require_hard_rules_ok(
+                    run_book_hard_rules(require_complete=True),
+                    f"whole-book hard rules after review round {rnd} mechanical cleanup",
+                )
                 git_add_commit(f"review round {rnd}: mechanical cleanup")
             
             step(f"Review round {rnd} complete.")
@@ -703,6 +900,11 @@ def run_export(state: dict) -> dict:
     Build final deliverables: outline, arc summary, manuscript, PDF.
     """
     banner("PHASE 4: EXPORT", "=")
+
+    require_hard_rules_ok(
+        run_book_hard_rules(require_complete=True),
+        "whole-book hard rules before export",
+    )
 
     # 1. Rebuild outline from chapters
     build_outline = BASE_DIR / "build_outline.py"
@@ -729,8 +931,8 @@ def run_export(state: dict) -> dict:
 
     if parts:
         manuscript.write_text("\n\n---\n\n".join(parts) + "\n")
-        word_count = sum(len(p.split()) for p in parts)
-        step(f"Manuscript: {len(parts)} chapters, {word_count} words")
+        char_count = sum(chinese_char_count(p) for p in parts)
+        step(f"Manuscript: {len(parts)} chapters, {char_count} Chinese chars")
     else:
         step("WARNING: no chapter files found for manuscript")
 
@@ -738,7 +940,7 @@ def run_export(state: dict) -> dict:
     build_tex = BASE_DIR / "typeset" / "build_tex.py"
     if build_tex.exists():
         step("Building LaTeX content...")
-        run_tool(f"uv run python typeset/build_tex.py", timeout=120)
+        run_tool(python_command("typeset/build_tex.py"), timeout=120)
 
         # 5. Typeset with tectonic (if available)
         novel_tex = BASE_DIR / "typeset" / "novel.tex"
@@ -758,15 +960,15 @@ def run_export(state: dict) -> dict:
 
     # 6. Final commit
     commit_hash = git_add_commit("export: manuscript, outline, arc summary, PDF")
-    total_words = count_words_in_chapters()
+    total_chars = count_chapter_chars()
     log_result(commit_hash, "export", state.get("novel_score", "?"),
-               total_words, "export", "Final export")
+               total_chars, "export", "Final export")
 
     state["phase"] = "complete"
     state["current_focus"] = "done"
     save_state(state)
 
-    banner(f"EXPORT COMPLETE — {len(chapter_files)} chapters, {total_words} words")
+    banner(f"EXPORT COMPLETE — {len(chapter_files)} chapters, {total_chars} Chinese chars")
     return state
 
 
@@ -853,7 +1055,7 @@ def run_pipeline(args):
     print(f"  Phase:      {state.get('phase')}")
     print(f"  Foundation: {state.get('foundation_score', 0)}")
     print(f"  Chapters:   {state.get('chapters_drafted', 0)}/{state.get('chapters_total', '?')}")
-    print(f"  Words:      {count_words_in_chapters()}")
+    print(f"  Chinese chars: {count_chapter_chars()}")
     print(f"  Novel:      {state.get('novel_score', 0)}")
     print(f"  Cycles:     {state.get('revision_cycle', 0)}")
 

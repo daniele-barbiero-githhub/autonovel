@@ -1,11 +1,14 @@
 {
-  "phase": "foundation",
-  "current_focus": null,
+  "phase": "drafting",
+  "current_focus": "ch_01",
   "iteration": 0,
-  "foundation_score": 0.0,
-  "lore_score": 0.0,
-  "chapters_drafted": 0,
-  "chapters_total": 0,
+  "foundation_score": 8.0,
+  "lore_score": 8.0,
+  "chapters_drafted": 1,
+  "chapters_total": 50,
   "novel_score": 0.0,
-  "debts": []
+  "revision_cycle": 0,
+  "debts": [],
+  "project": "\u5b88\u671b\u5148\u950b\uff1a\u9ed1\u8679\u5b64\u9b42",
+  "source_docs": "story_docs/GeneralProgram2"
 }

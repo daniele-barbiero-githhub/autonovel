@@ -147,7 +147,7 @@ ART:
   landing/index.html     — Responsive landing page template
 
 CONFIG:
-  .env.example           — API keys (Anthropic, fal.ai, ElevenLabs)
+  .env.example           — API keys and LLM provider selection
   pyproject.toml         — Python dependencies
 ```
 
@@ -195,16 +195,35 @@ loop continues until the reviewer's items are mostly qualified hedges rather tha
 
 ## API Keys
 
-The pipeline uses three external services:
+The pipeline can use these external services:
 
 | Service | Key | Used for |
 |---------|-----|----------|
-| Anthropic | `ANTHROPIC_API_KEY` | Writing, evaluation, review (Sonnet + Opus) |
+| Anthropic | `ANTHROPIC_API_KEY` | Writing, evaluation, review when `AUTONOVEL_LLM_PROVIDER=anthropic` |
+| Gemini | `GEMINI_API_KEY` | Writing, evaluation, review when `AUTONOVEL_LLM_PROVIDER=gemini` |
 | fal.ai | `FAL_KEY` | Cover art and ornament generation (Nano Banana 2) |
 | ElevenLabs | `ELEVENLABS_API_KEY` | Multi-voice audiobook generation |
 
-Copy `.env.example` to `.env` and fill in your keys. Only the Anthropic
-key is required for the core pipeline. Art and audiobook are optional.
+Copy `.env.example` to `.env` and fill in your keys. The core pipeline needs
+one LLM key: Anthropic by default, or Gemini if you set:
+
+```bash
+AUTONOVEL_LLM_PROVIDER=gemini
+GEMINI_API_KEY=your-gemini-api-key
+```
+
+The shared client in `llm.py` also supports per-role overrides:
+
+```bash
+AUTONOVEL_WRITER_PROVIDER=gemini
+AUTONOVEL_JUDGE_PROVIDER=anthropic
+AUTONOVEL_REVIEW_PROVIDER=gemini
+```
+
+For Gemini, the default writer/judge/review model is `gemini-2.5-pro`.
+You can override it with `AUTONOVEL_GEMINI_WRITER_MODEL`,
+`AUTONOVEL_GEMINI_JUDGE_MODEL`, or `AUTONOVEL_GEMINI_REVIEW_MODEL`.
+Art and audiobook are optional.
 
 ---
 

@@ -1,1 +1,15 @@
 timestamp	phase	score	words	keep_discard	description
+discarded	ch01	1.75	61	discard	Chapter 1 attempt 1
+discarded	ch01	2.91	51	discard	Chapter 1 attempt 3
+discarded	ch01	-1.0	45	discard	Chapter 1 attempt 5
+0cc56cb	ch01	?	78	forced	Chapter 1: kept after max attempts
+discarded	ch02	-1.0	60	discard	Chapter 2 attempt 1
+discarded	ch02	-1.0	86	discard	Chapter 2 attempt 2
+discarded	ch02	0.0	67	discard	Chapter 2 attempt 1
+discarded	ch02	1.75	59	discard	Chapter 2 attempt 3
+discarded	ch02	hard-rule-fail	70	discard	Chapter 2 attempt 4: hard rules failed
+discarded	ch02	0.5	64	discard	Chapter 2 attempt 5
+1d0cab5	ch02	?	93	forced	Chapter 2: kept after max attempts
+discarded	ch02	0.5	69	discard	Chapter 2 attempt 1
+discarded	ch02	0.8	63	discard	Chapter 2 attempt 2
+discarded	ch02	0.62	98	discard	Chapter 2 attempt 3

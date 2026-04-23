@@ -6,20 +6,18 @@ The disagreements between readers are where editorial decisions live.
 
 Usage: python reader_panel.py
 """
-import os
 import sys
 import json
 import re
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
+from llm import call_llm, model_for
 
 BASE_DIR = Path(__file__).parent
 load_dotenv(BASE_DIR / ".env")
 
-JUDGE_MODEL = os.environ.get("AUTONOVEL_JUDGE_MODEL", "claude-opus-4-6")
-API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-API_BASE = os.environ.get("AUTONOVEL_API_BASE_URL", "https://api.anthropic.com")
+JUDGE_MODEL = model_for("judge", "claude-opus-4-6")
 
 READERS = {
     "editor": {
@@ -76,10 +74,9 @@ READERS = {
     },
 }
 
-READER_PROMPT = """You have just read a complete fantasy novel in summary form.
+READER_PROMPT = """You have just read a complete or in-progress Chinese Overwatch: Invasion AU fan novel in summary form.
 The summaries include chapter-by-chapter events, opening and closing passages
-from each chapter, and key dialogue. The full novel is 72,422 words across
-24 chapters.
+from each drafted chapter, and key dialogue.
 
 {arc_summary}
 
@@ -90,7 +87,7 @@ Respond with JSON:
 {{
   "momentum_loss": "Where does the story lose momentum? Name the specific chapter(s) and what causes the drag. If it never loses momentum, say so and explain why.",
   
-  "earned_ending": "Does the ending feel earned by everything before it? Does Cass's choice in Ch 22 land? Does the final image in Ch 24 mirror Ch 1 in a way that satisfies? What, if anything, feels unearned?",
+  "earned_ending": "Does the ending or current endpoint feel earned by everything before it? If the draft reaches Ch 48-50, does the testimony broadcast and isolated-souls ending land? What, if anything, feels unearned?",
   
   "cut_candidate": "If the novel had to be 10% shorter (~7,000 words), which chapter or section would you cut first? Why? What would be lost?",
   
@@ -111,23 +108,16 @@ Respond with JSON:
 """
 
 def call_reader(reader_key, arc_summary):
-    import httpx
     reader = READERS[reader_key]
-    headers = {
-        "x-api-key": API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-    }
-    payload = {
-        "model": JUDGE_MODEL,
-        "max_tokens": 4000,
-        "temperature": 0.7,  # Higher temp for personality
-        "system": reader["system"],
-        "messages": [{"role": "user", "content": READER_PROMPT.format(arc_summary=arc_summary)}],
-    }
-    resp = httpx.post(f"{API_BASE}/v1/messages", headers=headers, json=payload, timeout=300)
-    resp.raise_for_status()
-    raw = resp.json()["content"][0]["text"]
+    raw = call_llm(
+        READER_PROMPT.format(arc_summary=arc_summary),
+        role="judge",
+        model=JUDGE_MODEL,
+        max_tokens=4000,
+        temperature=0.7,  # Higher temp for personality
+        system=reader["system"],
+        timeout=300,
+    )
     
     # Parse JSON
     raw = raw.strip()
